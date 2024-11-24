@@ -1,3 +1,17 @@
 package main
 
-func main() {}
+import (
+	"github.com/OleG2e/collector/internal/controller"
+	"net/http"
+)
+
+func main() {
+	mux := http.NewServeMux()
+	mux.HandleFunc(`POST /update/counter/{metric}/{value}`, controller.UpdateCounter())
+	mux.HandleFunc(`POST /update/gauge/{metric}/{value}`, controller.UpdateGauge())
+
+	err := http.ListenAndServe(`:8080`, mux)
+	if err != nil {
+		panic(err)
+	}
+}
