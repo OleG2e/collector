@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestBadRequestHandler(t *testing.T) {
+func TestGetCounter(t *testing.T) {
 	tests := []struct {
 		name string
 		want http.HandlerFunc
@@ -15,8 +15,24 @@ func TestBadRequestHandler(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := BadRequestHandler(); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("BadRequestHandler() = %v, want %v", got, tt.want)
+			if got := GetCounter(); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("GetCounter() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetGauge(t *testing.T) {
+	tests := []struct {
+		name string
+		want http.HandlerFunc
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := GetGauge(); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("GetGauge() = %v, want %v", got, tt.want)
 			}
 		})
 	}

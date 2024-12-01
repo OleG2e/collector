@@ -58,6 +58,7 @@ func TestMemStorage_GetCounterValue(t *testing.T) {
 		fields fields
 		args   args
 		want   int64
+		want1  bool
 	}{
 		// TODO: Add test cases.
 	}
@@ -66,8 +67,12 @@ func TestMemStorage_GetCounterValue(t *testing.T) {
 			s := MemStorage{
 				Metrics: tt.fields.Metrics,
 			}
-			if got := s.GetCounterValue(tt.args.metricName); got != tt.want {
-				t.Errorf("GetCounterValue() = %v, want %v", got, tt.want)
+			got, got1 := s.GetCounterValue(tt.args.metricName)
+			if got != tt.want {
+				t.Errorf("GetCounterValue() got = %v, want %v", got, tt.want)
+			}
+			if got1 != tt.want1 {
+				t.Errorf("GetCounterValue() got1 = %v, want %v", got1, tt.want1)
 			}
 		})
 	}
@@ -85,6 +90,7 @@ func TestMemStorage_GetGaugeValue(t *testing.T) {
 		fields fields
 		args   args
 		want   float64
+		want1  bool
 	}{
 		// TODO: Add test cases.
 	}
@@ -93,8 +99,12 @@ func TestMemStorage_GetGaugeValue(t *testing.T) {
 			s := MemStorage{
 				Metrics: tt.fields.Metrics,
 			}
-			if got := s.GetGaugeValue(tt.args.metricName); got != tt.want {
-				t.Errorf("GetGaugeValue() = %v, want %v", got, tt.want)
+			got, got1 := s.GetGaugeValue(tt.args.metricName)
+			if got != tt.want {
+				t.Errorf("GetGaugeValue() got = %v, want %v", got, tt.want)
+			}
+			if got1 != tt.want1 {
+				t.Errorf("GetGaugeValue() got1 = %v, want %v", got1, tt.want1)
 			}
 		})
 	}

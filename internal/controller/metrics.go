@@ -13,7 +13,7 @@ func UpdateCounter() http.HandlerFunc {
 		value, convErr := strconv.ParseInt(req.PathValue("value"), 10, 64)
 
 		if convErr != nil {
-			response.Error(w, convErr.Error())
+			response.BadRequestError(w, convErr.Error())
 		}
 
 		ms := storage.GetStorage()
@@ -30,14 +30,14 @@ func UpdateGauge() http.HandlerFunc {
 		//contentType := req.Header.Get("Content-Type")
 		//
 		//if contentType != "text/plain" {
-		//	response.Error(w, http.StatusText(http.StatusUnsupportedMediaType))
+		//	response.BadRequestError(w, http.StatusText(http.StatusUnsupportedMediaType))
 		//}
 
 		metric := req.PathValue("metric")
 		value, convErr := strconv.ParseFloat(req.PathValue("value"), 10)
 
 		if convErr != nil {
-			response.Error(w, convErr.Error())
+			response.BadRequestError(w, convErr.Error())
 		}
 
 		ms := storage.GetStorage()
@@ -48,8 +48,36 @@ func UpdateGauge() http.HandlerFunc {
 	}
 }
 
-func BadRequestHandler() http.HandlerFunc {
+func GetCounter() http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		response.Error(w, http.StatusText(http.StatusBadRequest))
+		metric := req.PathValue("metric")
+
+		ms := storage.GetStorage()
+
+		val, hasVal := ms.GetCounterValue(metric)
+
+		if !hasVal {
+			http.NotFound(w, req)
+			return
+		}
+
+		response.Send(w, http.StatusOK, strconv.FormatInt(val, 10))
+	}
+}
+
+func GetGauge() http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		metric := req.PathValue("metric")
+
+		ms := storage.GetStorage()
+
+		val, hasVal := ms.GetGaugeValue(metric)
+
+		if !hasVal {
+			http.NotFound(w, req)
+			return
+		}
+
+		response.Send(w, http.StatusOK, strconv.FormatFloat(val, 'g', -1, 64))
 	}
 }

@@ -12,19 +12,27 @@ type Metrics struct {
 }
 
 func (s MemStorage) AddCounterValue(metricName string, value int64) {
-	s.setCounterValue(metricName, s.GetCounterValue(metricName)+value)
+	curVal, hasValue := s.GetCounterValue(metricName)
+	if !hasValue {
+		s.setCounterValue(metricName, value)
+		return
+	}
+
+	s.setCounterValue(metricName, curVal+value)
 }
 
-func (s MemStorage) GetCounterValue(metricName string) int64 {
-	return s.Metrics.Counters[metricName]
+func (s MemStorage) GetCounterValue(metricName string) (int64, bool) {
+	v, hasValue := s.Metrics.Counters[metricName]
+	return v, hasValue
 }
 
 func (s MemStorage) setCounterValue(metricName string, value int64) {
 	s.Metrics.Counters[metricName] = value
 }
 
-func (s MemStorage) GetGaugeValue(metricName string) float64 {
-	return s.Metrics.Gauges[metricName]
+func (s MemStorage) GetGaugeValue(metricName string) (float64, bool) {
+	v, hasValue := s.Metrics.Gauges[metricName]
+	return v, hasValue
 }
 
 func (s MemStorage) SetGaugeValue(metricName string, value float64) {
