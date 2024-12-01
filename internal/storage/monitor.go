@@ -2,6 +2,7 @@ package storage
 
 import (
 	"fmt"
+	"github.com/OleG2e/collector/internal/config"
 	"io"
 	"log"
 	"math/rand"
@@ -13,8 +14,6 @@ import (
 var httpClient = http.DefaultClient
 var monitor *monitorStorage
 var pollCount = 0
-var pollInterval = time.Duration(2) * time.Second
-var reportInterval = time.Duration(10) * time.Second
 
 type monitorStorage struct {
 	Stats        map[string]any
@@ -28,6 +27,7 @@ func (s *monitorStorage) refreshStats() {
 }
 
 func (s *monitorStorage) initSendTicker() {
+	reportInterval := time.Duration(config.GetConfig().GetReportInterval()) * time.Second
 	ticker := time.NewTicker(reportInterval)
 	go func() {
 		for {
@@ -42,6 +42,7 @@ func (s *monitorStorage) initSendTicker() {
 
 func RunMonitor() {
 	initMonitor()
+	pollInterval := time.Duration(config.GetConfig().GetPollInterval()) * time.Second
 	for {
 		monitor.refreshStats()
 		time.Sleep(pollInterval)
@@ -89,7 +90,8 @@ func initMonitor() {
 
 func (s *monitorStorage) sendGaugeData() {
 	for k, v := range s.Stats {
-		req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost:8080/update/gauge/%s/%v", k, v), http.NoBody)
+		hp := config.GetConfig().GetServerHostPort()
+		req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://%s/update/gauge/%s/%v", hp, k, v), http.NoBody)
 
 		if err != nil {
 			log.Println(err)
@@ -117,7 +119,8 @@ func (s *monitorStorage) sendGaugeData() {
 }
 
 func (s *monitorStorage) sendCounterData() {
-	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost:8080/update/counter/PollCount/%d", pollCount), http.NoBody)
+	hp := config.GetConfig().GetServerHostPort()
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://%s/update/counter/PollCount/%d", hp, pollCount), http.NoBody)
 
 	if err != nil {
 		log.Println(err)

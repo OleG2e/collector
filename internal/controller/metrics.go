@@ -26,13 +26,6 @@ func UpdateCounter() http.HandlerFunc {
 
 func UpdateGauge() http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		// todo: move to middleware
-		//contentType := req.Header.Get("Content-Type")
-		//
-		//if contentType != "text/plain" {
-		//	response.BadRequestError(w, http.StatusText(http.StatusUnsupportedMediaType))
-		//}
-
 		metric := req.PathValue("metric")
 		value, convErr := strconv.ParseFloat(req.PathValue("value"), 10)
 

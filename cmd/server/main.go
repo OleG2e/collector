@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/OleG2e/collector/internal/config"
 	"github.com/OleG2e/collector/internal/controller"
 	metricmiddleware "github.com/OleG2e/collector/internal/middleware"
 	"github.com/OleG2e/collector/internal/response"
@@ -25,7 +26,9 @@ func main() {
 	r.Post("/", func(w http.ResponseWriter, req *http.Request) {
 		response.BadRequestError(w, http.StatusText(http.StatusBadRequest))
 	})
-	err := http.ListenAndServe(":8080", r)
+
+	hp := config.GetConfig().GetServerHostPort()
+	err := http.ListenAndServe(hp, r)
 
 	if err != nil {
 		panic(err)
