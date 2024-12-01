@@ -50,6 +50,6 @@ func UpdateGauge() http.HandlerFunc {
 
 func BadRequestHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		response.Error(w, http.StatusText(http.StatusBadRequest))
 	}
 }
