@@ -3,7 +3,6 @@ package storage
 import (
 	"fmt"
 	"github.com/OleG2e/collector/internal/config"
-	"io"
 	"log"
 	"math/rand"
 	"net/http"
@@ -30,12 +29,9 @@ func (s *monitorStorage) initSendTicker() {
 	reportInterval := time.Duration(config.GetConfig().GetReportInterval()) * time.Second
 	ticker := time.NewTicker(reportInterval)
 	go func() {
-		for {
-			select {
-			case <-ticker.C:
-				s.sendGaugeData()
-				s.sendCounterData()
-			}
+		for range ticker.C {
+			s.sendGaugeData()
+			s.sendCounterData()
 		}
 	}()
 }
@@ -102,18 +98,15 @@ func (s *monitorStorage) sendGaugeData() {
 
 		resp, clientErr := httpClient.Do(req)
 
-		if clientErr != nil {
+		closeErr := resp.Body.Close()
+		if closeErr != nil {
 			log.Println(clientErr)
 			continue
 		}
 
-		if resp != nil {
-			defer func(Body io.ReadCloser) {
-				respErr := Body.Close()
-				if respErr != nil {
-					log.Println(clientErr)
-				}
-			}(resp.Body)
+		if clientErr != nil {
+			log.Println(clientErr)
+			continue
 		}
 	}
 }
@@ -130,16 +123,13 @@ func (s *monitorStorage) sendCounterData() {
 
 	resp, clientErr := httpClient.Do(req)
 
-	if clientErr != nil {
+	closeErr := resp.Body.Close()
+	if closeErr != nil {
 		log.Println(clientErr)
+		return
 	}
 
-	if resp != nil {
-		defer func(Body io.ReadCloser) {
-			respErr := Body.Close()
-			if respErr != nil {
-				log.Println(clientErr)
-			}
-		}(resp.Body)
+	if clientErr != nil {
+		log.Println(clientErr)
 	}
 }
