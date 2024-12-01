@@ -34,7 +34,7 @@ func UpdateGauge() http.HandlerFunc {
 		//}
 
 		metric := req.PathValue("metric")
-		value, convErr := strconv.ParseFloat(req.PathValue("value"), 10)
+		value, convErr := strconv.ParseFloat(req.PathValue("value"), 64)
 
 		if convErr != nil {
 			response.BadRequestError(w, convErr.Error())
