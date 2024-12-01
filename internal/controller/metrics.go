@@ -47,3 +47,9 @@ func UpdateGauge() http.HandlerFunc {
 		response.Success(w)
 	}
 }
+
+func BadRequestHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+	}
+}
