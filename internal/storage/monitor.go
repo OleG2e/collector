@@ -98,14 +98,14 @@ func (s *monitorStorage) sendGaugeData() {
 
 		resp, clientErr := httpClient.Do(req)
 
-		closeErr := resp.Body.Close()
-		if closeErr != nil {
+		if clientErr != nil {
 			log.Println(clientErr)
 			continue
 		}
 
-		if clientErr != nil {
-			log.Println(clientErr)
+		closeErr := resp.Body.Close()
+		if closeErr != nil {
+			log.Println(closeErr)
 			continue
 		}
 	}
