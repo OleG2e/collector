@@ -7,9 +7,9 @@ import (
 )
 
 type Config struct {
-	serverHostPort string `env:"ADDRESS"`
-	reportInterval int    `env:"REPORT_INTERVAL"`
-	pollInterval   int    `env:"POLL_INTERVAL"`
+	ServerHostPort string `env:"ADDRESS"`
+	ReportInterval int    `env:"REPORT_INTERVAL"`
+	PollInterval   int    `env:"POLL_INTERVAL"`
 }
 
 var appConfig *Config
@@ -41,27 +41,27 @@ func initAppConfig() *Config {
 
 	flag.Parse()
 
-	if c.serverHostPort == "" {
-		c.serverHostPort = sh
+	if c.ServerHostPort == "" {
+		c.ServerHostPort = sh
 	}
-	if c.reportInterval == 0 {
-		c.reportInterval = ri
+	if c.ReportInterval == 0 {
+		c.ReportInterval = ri
 	}
-	if c.pollInterval == 0 {
-		c.pollInterval = pi
+	if c.PollInterval == 0 {
+		c.PollInterval = pi
 	}
 
 	return &c
 }
 
 func (c Config) GetServerHostPort() string {
-	return c.serverHostPort
+	return c.ServerHostPort
 }
 
 func (c Config) GetReportInterval() int {
-	return c.reportInterval
+	return c.ReportInterval
 }
 
 func (c Config) GetPollInterval() int {
-	return c.pollInterval
+	return c.PollInterval
 }
