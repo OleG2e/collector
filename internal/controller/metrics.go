@@ -1,16 +1,20 @@
 package controller
 
 import (
-	"github.com/OleG2e/collector/internal/response"
-	"github.com/OleG2e/collector/internal/storage"
 	"net/http"
 	"strconv"
+
+	"github.com/OleG2e/collector/internal/response"
+	"github.com/OleG2e/collector/internal/storage"
 )
+
+const metricReqPathName = "metric"
+const valueReqPathName = "value"
 
 func UpdateCounter() http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		metric := req.PathValue("metric")
-		value, convErr := strconv.ParseInt(req.PathValue("value"), 10, 64)
+		metric := req.PathValue(metricReqPathName)
+		value, convErr := strconv.ParseInt(req.PathValue(valueReqPathName), 10, 64)
 
 		if convErr != nil {
 			response.BadRequestError(w, convErr.Error())
@@ -26,8 +30,8 @@ func UpdateCounter() http.HandlerFunc {
 
 func UpdateGauge() http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		metric := req.PathValue("metric")
-		value, convErr := strconv.ParseFloat(req.PathValue("value"), 64)
+		metric := req.PathValue(metricReqPathName)
+		value, convErr := strconv.ParseFloat(req.PathValue(valueReqPathName), 64)
 
 		if convErr != nil {
 			response.BadRequestError(w, convErr.Error())
@@ -43,7 +47,7 @@ func UpdateGauge() http.HandlerFunc {
 
 func GetCounter() http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		metric := req.PathValue("metric")
+		metric := req.PathValue(metricReqPathName)
 
 		ms := storage.GetStorage()
 
@@ -60,7 +64,7 @@ func GetCounter() http.HandlerFunc {
 
 func GetGauge() http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		metric := req.PathValue("metric")
+		metric := req.PathValue(metricReqPathName)
 
 		ms := storage.GetStorage()
 

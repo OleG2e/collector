@@ -13,8 +13,8 @@ func Success(writer http.ResponseWriter) {
 	setDefaultHeaders(writer)
 }
 
-func BadRequestError(writer http.ResponseWriter, error string) {
-	http.Error(writer, error, http.StatusBadRequest)
+func BadRequestError(writer http.ResponseWriter, err string) {
+	http.Error(writer, err, http.StatusBadRequest)
 }
 
 func setStatusCode(writer http.ResponseWriter, statusCode int) {

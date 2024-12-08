@@ -1,13 +1,14 @@
 package main
 
 import (
+	"net/http"
+
 	"github.com/OleG2e/collector/internal/config"
 	"github.com/OleG2e/collector/internal/controller"
 	metricmiddleware "github.com/OleG2e/collector/internal/middleware"
 	"github.com/OleG2e/collector/internal/response"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"net/http"
 )
 
 func main() {

@@ -1,10 +1,11 @@
 package middleware
 
 import (
-	"github.com/OleG2e/collector/internal/response"
 	"net/http"
 	"slices"
 	"strings"
+
+	"github.com/OleG2e/collector/internal/response"
 )
 
 func AllowedMetricsOnly(next http.Handler) http.Handler {

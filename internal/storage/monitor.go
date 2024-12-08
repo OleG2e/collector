@@ -2,12 +2,13 @@ package storage
 
 import (
 	"fmt"
-	"github.com/OleG2e/collector/internal/config"
 	"log"
 	"math/rand"
 	"net/http"
 	"runtime"
 	"time"
+
+	"github.com/OleG2e/collector/internal/config"
 )
 
 var httpClient = http.DefaultClient
@@ -113,7 +114,8 @@ func (s *monitorStorage) sendGaugeData() {
 
 func (s *monitorStorage) sendCounterData() {
 	hp := config.GetConfig().GetServerHostPort()
-	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://%s/update/counter/PollCount/%d", hp, pollCount), http.NoBody)
+	url := fmt.Sprintf("http://%s/update/counter/PollCount/%d", hp, pollCount)
+	req, err := http.NewRequest(http.MethodPost, url, http.NoBody)
 
 	if err != nil {
 		log.Println(err)

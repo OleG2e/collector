@@ -2,8 +2,9 @@ package config
 
 import (
 	"flag"
-	"github.com/caarlos0/env/v11"
 	"log"
+
+	"github.com/caarlos0/env/v11"
 )
 
 type Config struct {
@@ -21,6 +22,9 @@ func GetConfig() *Config {
 	return appConfig
 }
 
+const defaultReportIntervalSeconds = 10
+const defaultPollIntervalSeconds = 2
+
 func initAppConfig() *Config {
 	var (
 		sh string
@@ -36,8 +40,8 @@ func initAppConfig() *Config {
 	}
 
 	flag.StringVar(&sh, "a", "localhost:8080", "server host:port")
-	flag.IntVar(&ri, "r", 10, "report interval")
-	flag.IntVar(&pi, "p", 2, "poll interval")
+	flag.IntVar(&ri, "r", defaultReportIntervalSeconds, "report interval")
+	flag.IntVar(&pi, "p", defaultPollIntervalSeconds, "poll interval")
 
 	flag.Parse()
 
