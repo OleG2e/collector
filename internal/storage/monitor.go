@@ -49,11 +49,7 @@ func (s *monitorStorage) initSendTicker() {
 			}
 
 			if sendGaugeDataErr == nil && sendCounterDataErr == nil {
-				log.Println("pollCount TEST1")
-				log.Println(pollCount)
 				s.resetPollCount()
-				log.Println(pollCount)
-				log.Println("pollCount TEST2")
 			}
 		}
 	}()
