@@ -1,11 +1,14 @@
 package storage
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"net/http"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/OleG2e/collector/internal/config"
@@ -18,6 +21,7 @@ var pollCount = 0
 type monitorStorage struct {
 	Stats        map[string]any
 	RuntimeStats *runtime.MemStats
+	mx           sync.RWMutex
 }
 
 func (s *monitorStorage) refreshStats() {
@@ -26,13 +30,31 @@ func (s *monitorStorage) refreshStats() {
 	s.seedGauge()
 }
 
+func (s *monitorStorage) resetPollCount() {
+	pollCount = 0
+}
+
 func (s *monitorStorage) initSendTicker() {
 	reportInterval := time.Duration(config.GetConfig().GetReportInterval()) * time.Second
 	ticker := time.NewTicker(reportInterval)
 	go func() {
 		for range ticker.C {
-			s.sendGaugeData()
-			s.sendCounterData()
+			sendGaugeDataErr := s.sendGaugeData()
+			if sendGaugeDataErr != nil {
+				log.Println(sendGaugeDataErr)
+			}
+			sendCounterDataErr := s.sendCounterData()
+			if sendCounterDataErr != nil {
+				log.Println(sendCounterDataErr)
+			}
+
+			if sendGaugeDataErr == nil && sendCounterDataErr == nil {
+				log.Println("pollCount TEST1")
+				log.Println(pollCount)
+				s.resetPollCount()
+				log.Println(pollCount)
+				log.Println("pollCount TEST2")
+			}
 		}
 	}()
 }
@@ -47,6 +69,9 @@ func RunMonitor() {
 }
 
 func (s *monitorStorage) seedGauge() {
+	s.mx.Lock()
+	defer s.mx.Unlock()
+
 	s.Stats["Alloc"] = s.RuntimeStats.Alloc
 	s.Stats["BuckHashSys"] = s.RuntimeStats.BuckHashSys
 	s.Stats["Frees"] = s.RuntimeStats.Frees
@@ -85,53 +110,82 @@ func initMonitor() {
 	monitor.initSendTicker()
 }
 
-func (s *monitorStorage) sendGaugeData() {
+func (s *monitorStorage) sendGaugeData() error {
 	for k, v := range s.Stats {
 		hp := config.GetConfig().GetServerHostPort()
-		req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://%s/update/gauge/%s/%v", hp, k, v), http.NoBody)
+		req, reqErr := http.NewRequest(http.MethodPost, fmt.Sprintf("http://%s/update/gauge/%s/%v", hp, k, v), http.NoBody)
 
-		if err != nil {
-			log.Println(err)
-			continue
+		if req != nil {
+			req.Header.Add("Content-Type", "text/plain")
+
+			reqCloseErr := req.Body.Close()
+			if reqCloseErr != nil {
+				return errors.New(reqCloseErr.Error())
+			}
 		}
 
-		req.Header.Add("Content-Type", "text/plain")
+		if reqErr != nil {
+			return errors.New(reqErr.Error())
+		}
 
 		resp, clientErr := httpClient.Do(req)
 
-		if clientErr != nil {
-			log.Println(clientErr)
-			continue
+		if resp != nil {
+			_, bodyErr := io.ReadAll(resp.Body)
+
+			if bodyErr != nil {
+				return errors.New(bodyErr.Error())
+			}
+
+			respCloseErr := resp.Body.Close()
+			if respCloseErr != nil {
+				return errors.New(respCloseErr.Error())
+			}
 		}
 
-		closeErr := resp.Body.Close()
-		if closeErr != nil {
-			log.Println(closeErr)
-			continue
+		if clientErr != nil {
+			return errors.New(clientErr.Error())
 		}
 	}
+	return nil
 }
 
-func (s *monitorStorage) sendCounterData() {
+func (s *monitorStorage) sendCounterData() error {
 	hp := config.GetConfig().GetServerHostPort()
 	url := fmt.Sprintf("http://%s/update/counter/PollCount/%d", hp, pollCount)
-	req, err := http.NewRequest(http.MethodPost, url, http.NoBody)
+	req, reqErr := http.NewRequest(http.MethodPost, url, http.NoBody)
 
-	if err != nil {
-		log.Println(err)
+	if req != nil {
+		req.Header.Add("Content-Type", "text/plain")
+
+		reqCloseErr := req.Body.Close()
+		if reqCloseErr != nil {
+			return errors.New(reqCloseErr.Error())
+		}
 	}
 
-	req.Header.Add("Content-Type", "text/plain")
+	if reqErr != nil {
+		return errors.New(reqErr.Error())
+	}
 
 	resp, clientErr := httpClient.Do(req)
 
-	closeErr := resp.Body.Close()
-	if closeErr != nil {
-		log.Println(clientErr)
-		return
+	if resp != nil {
+		_, bodyErr := io.ReadAll(resp.Body)
+
+		if bodyErr != nil {
+			return errors.New(bodyErr.Error())
+		}
+
+		respCloseErr := resp.Body.Close()
+		if respCloseErr != nil {
+			return errors.New(respCloseErr.Error())
+		}
 	}
 
 	if clientErr != nil {
-		log.Println(clientErr)
+		return errors.New(clientErr.Error())
 	}
+
+	return nil
 }

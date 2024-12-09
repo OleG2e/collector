@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"flag"
 	"log"
 
@@ -17,7 +18,11 @@ var appConfig *Config
 
 func GetConfig() *Config {
 	if appConfig == nil {
-		appConfig = initAppConfig()
+		c, err := initAppConfig()
+		if err != nil {
+			log.Fatal(err)
+		}
+		appConfig = c
 	}
 	return appConfig
 }
@@ -25,7 +30,7 @@ func GetConfig() *Config {
 const defaultReportIntervalSeconds = 10
 const defaultPollIntervalSeconds = 2
 
-func initAppConfig() *Config {
+func initAppConfig() (*Config, error) {
 	var (
 		sh string
 		ri int
@@ -36,7 +41,7 @@ func initAppConfig() *Config {
 
 	err := env.Parse(&c)
 	if err != nil {
-		log.Fatal(err)
+		return nil, errors.New(err.Error())
 	}
 
 	flag.StringVar(&sh, "a", "localhost:8080", "server host:port")
@@ -55,7 +60,7 @@ func initAppConfig() *Config {
 		c.PollInterval = pi
 	}
 
-	return &c
+	return &c, nil
 }
 
 func (c Config) GetServerHostPort() string {
