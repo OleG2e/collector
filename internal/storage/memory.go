@@ -28,7 +28,12 @@ func (s *MemStorage) GetCounterValue(metricName string) (int64, bool) {
 	s.Metrics.mx.RLock()
 	defer s.Metrics.mx.RUnlock()
 
-	v, hasValue := s.Metrics.Counters[metricName]
+	mapCopy := make(map[string]int64, len(s.Metrics.Counters))
+	for key, val := range s.Metrics.Counters {
+		mapCopy[key] = val
+	}
+
+	v, hasValue := mapCopy[metricName]
 	return v, hasValue
 }
 
@@ -36,14 +41,25 @@ func (s *MemStorage) setCounterValue(metricName string, value int64) {
 	s.Metrics.mx.Lock()
 	defer s.Metrics.mx.Unlock()
 
-	s.Metrics.Counters[metricName] = value
+	mapCopy := make(map[string]int64, len(s.Metrics.Counters))
+	for key, val := range s.Metrics.Counters {
+		mapCopy[key] = val
+	}
+
+	mapCopy[metricName] = value
+	s.Metrics.Counters = mapCopy
 }
 
 func (s *MemStorage) GetGaugeValue(metricName string) (float64, bool) {
 	s.Metrics.mx.RLock()
 	defer s.Metrics.mx.RUnlock()
 
-	v, hasValue := s.Metrics.Gauges[metricName]
+	mapCopy := make(map[string]float64, len(s.Metrics.Gauges))
+	for key, val := range s.Metrics.Gauges {
+		mapCopy[key] = val
+	}
+
+	v, hasValue := mapCopy[metricName]
 	return v, hasValue
 }
 
@@ -51,7 +67,13 @@ func (s *MemStorage) SetGaugeValue(metricName string, value float64) {
 	s.Metrics.mx.Lock()
 	defer s.Metrics.mx.Unlock()
 
-	s.Metrics.Gauges[metricName] = value
+	mapCopy := make(map[string]float64, len(s.Metrics.Gauges))
+	for key, val := range s.Metrics.Gauges {
+		mapCopy[key] = val
+	}
+
+	mapCopy[metricName] = value
+	s.Metrics.Gauges = mapCopy
 }
 
 func NewMemStorage() MemStorage {

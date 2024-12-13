@@ -1,7 +1,6 @@
 package config
 
 import (
-	"errors"
 	"flag"
 	"log"
 
@@ -41,7 +40,7 @@ func initAppConfig() (*Config, error) {
 
 	err := env.Parse(&c)
 	if err != nil {
-		return nil, errors.New(err.Error())
+		return nil, err
 	}
 
 	flag.StringVar(&sh, "a", "localhost:8080", "server host:port")

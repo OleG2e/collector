@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -16,22 +15,32 @@ import (
 
 var httpClient = http.DefaultClient
 var monitor *monitorStorage
-var pollCount = 0
 
 type monitorStorage struct {
 	Stats        map[string]any
+	pollCount    int
 	RuntimeStats *runtime.MemStats
 	mx           sync.RWMutex
 }
 
 func (s *monitorStorage) refreshStats() {
-	pollCount++
+	s.incrementPollCount()
 	runtime.ReadMemStats(s.RuntimeStats)
 	s.seedGauge()
 }
 
 func (s *monitorStorage) resetPollCount() {
-	pollCount = 0
+	s.mx.Lock()
+	defer s.mx.Unlock()
+
+	s.pollCount = 0
+}
+
+func (s *monitorStorage) incrementPollCount() {
+	s.mx.Lock()
+	defer s.mx.Unlock()
+
+	s.pollCount++
 }
 
 func (s *monitorStorage) initSendTicker() {
@@ -98,6 +107,18 @@ func (s *monitorStorage) seedGauge() {
 	s.Stats["RandomValue"] = rand.Int63()
 }
 
+func (s *monitorStorage) getStats() map[string]any {
+	s.mx.RLock()
+	defer s.mx.RUnlock()
+
+	mapCopy := make(map[string]any, len(s.Stats))
+	for key, val := range s.Stats {
+		mapCopy[key] = val
+	}
+
+	return mapCopy
+}
+
 func initMonitor() {
 	g := make(map[string]any)
 	ms := runtime.MemStats{}
@@ -107,80 +128,80 @@ func initMonitor() {
 }
 
 func (s *monitorStorage) sendGaugeData() error {
-	for k, v := range s.Stats {
-		hp := config.GetConfig().GetServerHostPort()
+	hp := config.GetConfig().GetServerHostPort()
+	for k, v := range s.getStats() {
 		req, reqErr := http.NewRequest(http.MethodPost, fmt.Sprintf("http://%s/update/gauge/%s/%v", hp, k, v), http.NoBody)
 
-		if req != nil {
-			req.Header.Add("Content-Type", "text/plain")
-
-			reqCloseErr := req.Body.Close()
-			if reqCloseErr != nil {
-				return errors.New(reqCloseErr.Error())
-			}
-		}
-
 		if reqErr != nil {
-			return errors.New(reqErr.Error())
+			return reqErr
 		}
 
-		resp, clientErr := httpClient.Do(req)
-
-		if resp != nil {
-			_, bodyErr := io.ReadAll(resp.Body)
-
-			if bodyErr != nil {
-				return errors.New(bodyErr.Error())
-			}
-
-			respCloseErr := resp.Body.Close()
-			if respCloseErr != nil {
-				return errors.New(respCloseErr.Error())
-			}
-		}
-
-		if clientErr != nil {
-			return errors.New(clientErr.Error())
-		}
-	}
-	return nil
-}
-
-func (s *monitorStorage) sendCounterData() error {
-	hp := config.GetConfig().GetServerHostPort()
-	url := fmt.Sprintf("http://%s/update/counter/PollCount/%d", hp, pollCount)
-	req, reqErr := http.NewRequest(http.MethodPost, url, http.NoBody)
-
-	if req != nil {
 		req.Header.Add("Content-Type", "text/plain")
 
 		reqCloseErr := req.Body.Close()
 		if reqCloseErr != nil {
-			return errors.New(reqCloseErr.Error())
+			return reqCloseErr
 		}
-	}
 
-	if reqErr != nil {
-		return errors.New(reqErr.Error())
-	}
+		resp, clientErr := httpClient.Do(req)
 
-	resp, clientErr := httpClient.Do(req)
+		if clientErr != nil {
+			return clientErr
+		}
 
-	if resp != nil {
 		_, bodyErr := io.ReadAll(resp.Body)
 
 		if bodyErr != nil {
-			return errors.New(bodyErr.Error())
+			return bodyErr
 		}
 
 		respCloseErr := resp.Body.Close()
 		if respCloseErr != nil {
-			return errors.New(respCloseErr.Error())
+			return respCloseErr
 		}
 	}
 
+	return nil
+}
+
+func (s *monitorStorage) getPollCount() int {
+	s.mx.RLock()
+	defer s.mx.RUnlock()
+
+	return s.pollCount
+}
+
+func (s *monitorStorage) sendCounterData() error {
+	hp := config.GetConfig().GetServerHostPort()
+	url := fmt.Sprintf("http://%s/update/counter/PollCount/%d", hp, s.getPollCount())
+	req, reqErr := http.NewRequest(http.MethodPost, url, http.NoBody)
+
+	if reqErr != nil {
+		return reqErr
+	}
+
+	req.Header.Add("Content-Type", "text/plain")
+
+	reqCloseErr := req.Body.Close()
+	if reqCloseErr != nil {
+		return reqCloseErr
+	}
+
+	resp, clientErr := httpClient.Do(req)
+
 	if clientErr != nil {
-		return errors.New(clientErr.Error())
+		return clientErr
+	}
+
+	_, bodyErr := io.ReadAll(resp.Body)
+
+	if bodyErr != nil {
+		return bodyErr
+	}
+
+	respCloseErr := resp.Body.Close()
+	if respCloseErr != nil {
+		return respCloseErr
 	}
 
 	return nil
