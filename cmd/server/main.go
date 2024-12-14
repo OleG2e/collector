@@ -5,16 +5,15 @@ import (
 
 	"github.com/OleG2e/collector/internal/config"
 	"github.com/OleG2e/collector/internal/controller"
-	metricmiddleware "github.com/OleG2e/collector/internal/middleware"
+	"github.com/OleG2e/collector/internal/middleware"
 	"github.com/OleG2e/collector/internal/response"
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 )
 
 func main() {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
-	r.Use(metricmiddleware.AllowedMetricsOnly)
+	r.Use(middleware.AllowedMetricsOnly)
 
 	r.Get("/value/counter/{metric}", controller.GetCounter())
 	r.Get("/value/gauge/{metric}", controller.GetGauge())
