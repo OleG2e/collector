@@ -1,16 +1,21 @@
 package storage
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"math/rand"
 	"net/http"
 	"runtime"
+	"strconv"
 	"sync"
 	"time"
 
-	"github.com/OleG2e/collector/internal/config"
+	"github.com/OleG2e/collector/internal/network"
+
+	"github.com/OleG2e/collector/internal/container"
 )
 
 var httpClient = http.DefaultClient
@@ -18,7 +23,7 @@ var monitor *monitorStorage
 
 type monitorStorage struct {
 	Stats        map[string]any
-	pollCount    int
+	pollCount    int64
 	RuntimeStats *runtime.MemStats
 	mx           sync.RWMutex
 }
@@ -44,8 +49,7 @@ func (s *monitorStorage) incrementPollCount() {
 }
 
 func (s *monitorStorage) initSendTicker() {
-	reportInterval := time.Duration(config.GetConfig().GetReportInterval()) * time.Second
-	ticker := time.NewTicker(reportInterval)
+	ticker := time.NewTicker(container.GetConfig().GetReportIntervalDuration())
 	go func() {
 		for range ticker.C {
 			sendGaugeDataErr := s.sendGaugeData()
@@ -66,10 +70,9 @@ func (s *monitorStorage) initSendTicker() {
 
 func RunMonitor() {
 	initMonitor()
-	pollInterval := time.Duration(config.GetConfig().GetPollInterval()) * time.Second
 	for {
 		monitor.refreshStats()
-		time.Sleep(pollInterval)
+		time.Sleep(container.GetConfig().GetPollIntervalDuration())
 	}
 }
 
@@ -119,6 +122,23 @@ func (s *monitorStorage) getStats() map[string]any {
 	return mapCopy
 }
 
+func (s *monitorStorage) getStatForms() []network.MetricForm {
+	stats := s.getStats()
+	forms := make([]network.MetricForm, len(stats))
+	i := 0
+	for key, val := range stats {
+		valConverted, convertErr := strconv.ParseFloat(fmt.Sprintf("%v", val), 64)
+		if convertErr != nil {
+			log.Println(convertErr)
+		}
+		form := network.MetricForm{ID: key, MType: "gauge", Value: &valConverted}
+		forms[i] = form
+		i++
+	}
+
+	return forms
+}
+
 func initMonitor() {
 	g := make(map[string]any)
 	ms := runtime.MemStats{}
@@ -128,15 +148,22 @@ func initMonitor() {
 }
 
 func (s *monitorStorage) sendGaugeData() error {
-	hp := config.GetConfig().GetServerHostPort()
-	for k, v := range s.getStats() {
-		req, reqErr := http.NewRequest(http.MethodPost, fmt.Sprintf("http://%s/update/gauge/%s/%v", hp, k, v), http.NoBody)
+	address := container.GetConfig().GetAddress()
+	url := "http://" + address + "/update/"
+	for _, form := range s.getStatForms() {
+		formMarshalled, marshErr := json.Marshal(form)
+		if marshErr != nil {
+			return marshErr
+		}
+
+		reader := bytes.NewReader(formMarshalled)
+		req, reqErr := http.NewRequest(http.MethodPost, url, reader)
 
 		if reqErr != nil {
 			return reqErr
 		}
 
-		req.Header.Add("Content-Type", "text/plain")
+		req.Header.Add("Content-Type", "application/json")
 
 		reqCloseErr := req.Body.Close()
 		if reqCloseErr != nil {
@@ -164,23 +191,35 @@ func (s *monitorStorage) sendGaugeData() error {
 	return nil
 }
 
-func (s *monitorStorage) getPollCount() int {
+func (s *monitorStorage) getPollCount() *int64 {
 	s.mx.RLock()
 	defer s.mx.RUnlock()
 
-	return s.pollCount
+	return &s.pollCount
 }
 
 func (s *monitorStorage) sendCounterData() error {
-	hp := config.GetConfig().GetServerHostPort()
-	url := fmt.Sprintf("http://%s/update/counter/PollCount/%d", hp, s.getPollCount())
-	req, reqErr := http.NewRequest(http.MethodPost, url, http.NoBody)
+	address := container.GetConfig().GetAddress()
+	url := fmt.Sprintf("http://%s/update/", address)
+
+	form := network.MetricForm{
+		ID:    "PollCount",
+		MType: "counter",
+		Delta: s.getPollCount(),
+	}
+
+	formMarshalled, marshErr := json.Marshal(form)
+	if marshErr != nil {
+		return marshErr
+	}
+
+	req, reqErr := http.NewRequest(http.MethodPost, url, bytes.NewReader(formMarshalled))
 
 	if reqErr != nil {
 		return reqErr
 	}
 
-	req.Header.Add("Content-Type", "text/plain")
+	req.Header.Add("Content-Type", "application/json")
 
 	reqCloseErr := req.Body.Close()
 	if reqCloseErr != nil {

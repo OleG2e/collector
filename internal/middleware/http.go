@@ -1,13 +1,10 @@
 package middleware
 
 import (
-	"errors"
-	"fmt"
 	"net/http"
-	"syscall"
 	"time"
 
-	"go.uber.org/zap"
+	"github.com/OleG2e/collector/internal/container"
 )
 
 type (
@@ -29,28 +26,12 @@ func (r *loggingResponseWriter) Write(b []byte) (int, error) {
 }
 
 func (r *loggingResponseWriter) WriteHeader(statusCode int) {
-	fmt.Println(statusCode)
 	r.ResponseWriter.WriteHeader(statusCode)
 	r.responseData.status = statusCode
 }
 
 func Logger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		logger, _ := zap.NewDevelopment()
-
-		defer func(logger *zap.Logger) {
-			syncErr := logger.Sync()
-			if syncErr != nil {
-				if errors.Is(syncErr, syscall.EINVAL) {
-					// Sync is not supported on os.Stderr / os.Stdout on all platforms.
-					return
-				}
-				logger.Error("Failed to sync logger", zap.Error(syncErr))
-			}
-		}(logger)
-
-		sugar := logger.Sugar()
-
 		start := time.Now()
 
 		uri := r.RequestURI
@@ -65,13 +46,12 @@ func Logger(next http.Handler) http.Handler {
 			responseData:   responseData,
 		}
 
-		fmt.Println(lw.responseData)
-
 		next.ServeHTTP(&lw, r)
 
 		duration := time.Since(start)
 
-		sugar.Infoln(
+		logger := container.GetLogger().Sugar()
+		logger.Infoln(
 			"uri", uri,
 			"method", method,
 			"duration", duration,
