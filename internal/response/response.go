@@ -1,8 +1,10 @@
 package response
 
 import (
-	"log"
+	"encoding/json"
 	"net/http"
+
+	"github.com/OleG2e/collector/internal/container"
 )
 
 func setDefaultHeaders(writer http.ResponseWriter) {
@@ -21,13 +23,14 @@ func setStatusCode(writer http.ResponseWriter, statusCode int) {
 	writer.WriteHeader(statusCode)
 }
 
-func Send(writer http.ResponseWriter, statusCode int, data string) {
+func Send(writer http.ResponseWriter, statusCode int, data any) {
 	setDefaultHeaders(writer)
 	setStatusCode(writer, statusCode)
 
-	_, err := writer.Write([]byte(data))
+	err := json.NewEncoder(writer).Encode(data)
 	if err != nil {
-		log.Printf("error encoding response: %v", err)
+		logger := container.GetLogger().Sugar()
+		logger.Errorln("error encoding response", err)
 		return
 	}
 }
