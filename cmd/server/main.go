@@ -3,39 +3,50 @@ package main
 import (
 	"net/http"
 
+	"github.com/OleG2e/collector/internal/controller"
+	"github.com/OleG2e/collector/internal/response"
+
 	"github.com/OleG2e/collector/internal/middleware"
 
 	"github.com/OleG2e/collector/internal/container"
-	"github.com/OleG2e/collector/internal/controller"
-	"github.com/OleG2e/collector/internal/response"
 	"github.com/go-chi/chi/v5"
 )
 
 func main() {
 	container.InitContainer()
 
-	r := chi.NewRouter()
-	r.Use(middleware.Logger)
-	r.Use(middleware.AllowedMetricsOnly)
+	router := chi.NewRouter()
+	router.Use(middleware.GzipMiddleware)
+	router.Use(middleware.Logger)
 
-	r.Post("/update/", controller.UpdateMetric())
-	r.Post("/value/", controller.GetMetric())
+	router.Group(func(r chi.Router) {
+		r.Get("/", func(w http.ResponseWriter, req *http.Request) {
+			w.Header().Add("Content-Type", "text/html")
+			w.WriteHeader(http.StatusOK)
+		})
+	})
 
-	r.Get("/value/counter/{metric}", controller.GetCounter())
-	r.Get("/value/gauge/{metric}", controller.GetGauge())
+	router.Route("/", func(r chi.Router) {
+		r.Use(middleware.AllowedMetricsOnly)
+		r.Post("/update/", controller.UpdateMetric())
+		r.Post("/value/", controller.GetMetric())
 
-	r.Post("/update/counter/{metric}/{value}", controller.UpdateCounter())
-	r.Post("/update/gauge/{metric}/{value}", controller.UpdateGauge())
-	r.Post("/update/counter/", r.NotFoundHandler())
-	r.Post("/update/gauge/", r.NotFoundHandler())
+		r.Get("/value/counter/{metric}", controller.GetCounter())
+		r.Get("/value/gauge/{metric}", controller.GetGauge())
 
-	r.Post("/", func(w http.ResponseWriter, req *http.Request) {
-		response.BadRequestError(w, http.StatusText(http.StatusBadRequest))
+		r.Post("/update/counter/{metric}/{value}", controller.UpdateCounter())
+		r.Post("/update/gauge/{metric}/{value}", controller.UpdateGauge())
+		r.Post("/update/counter/", router.NotFoundHandler())
+		r.Post("/update/gauge/", router.NotFoundHandler())
+
+		r.Post("/", func(w http.ResponseWriter, req *http.Request) {
+			response.Success(w)
+		})
 	})
 
 	address := container.GetConfig().GetAddress()
 
-	if err := http.ListenAndServe(address, r); err != nil {
+	if err := http.ListenAndServe(address, router); err != nil {
 		container.GetLogger().Sugar().Panic("server panic error", err)
 	}
 }

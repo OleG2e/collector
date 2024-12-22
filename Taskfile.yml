@@ -1,6 +1,9 @@
 version: '3'
 
 tasks:
+  run:
+    cmds:
+      - cd cmd/server && go build -race -buildvcs=false -o server && ./server && cd ../..  && cd cmd/agent && go build -race -buildvcs=false -o agent && ./agent
   tests:
     cmds:
       - task: test1
@@ -10,6 +13,7 @@ tasks:
       - task: test5
       - task: test6
       - task: test7
+      - task: test8
       - echo "Tests are done"
   test1:
     cmds:
@@ -32,3 +36,6 @@ tasks:
   test7:
     cmds:
       - cd cmd/server && go build -buildvcs=false -o server && cd ../.. && ./metricstest -test.v -test.run=TestIteration7  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port 8080
+  test8:
+    cmds:
+      - cd cmd/server && go build -buildvcs=false -o server && cd ../.. && ./metricstest -test.v -test.run=TestIteration8  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port 8080
