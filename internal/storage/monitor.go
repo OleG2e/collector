@@ -192,8 +192,8 @@ func (s *monitorStorage) sendGaugeData() error {
 }
 
 func (s *monitorStorage) getPollCount() *int64 {
-	s.mx.RLock()
-	defer s.mx.RUnlock()
+	s.mx.Lock()
+	defer s.mx.Unlock()
 
 	return &s.pollCount
 }
