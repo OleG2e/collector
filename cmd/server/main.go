@@ -5,6 +5,7 @@ import (
 
 	"github.com/OleG2e/collector/internal/controller"
 	"github.com/OleG2e/collector/internal/response"
+	"github.com/OleG2e/collector/internal/storage"
 
 	"github.com/OleG2e/collector/internal/middleware"
 
@@ -13,7 +14,15 @@ import (
 )
 
 func main() {
-	container.InitContainer()
+	container.InitServerContainer()
+
+	storage.InitStorage()
+	defer func(storage *storage.MemStorage) {
+		err := storage.FlushStorage()
+		if err != nil {
+			container.GetLogger().Error(err)
+		}
+	}(storage.GetStorage())
 
 	router := chi.NewRouter()
 	router.Use(middleware.GzipMiddleware)
@@ -44,9 +53,9 @@ func main() {
 		})
 	})
 
-	address := container.GetConfig().GetAddress()
+	address := container.GetServerConfig().GetAddress()
 
 	if err := http.ListenAndServe(address, router); err != nil {
-		container.GetLogger().Sugar().Panic("server panic error", err)
+		container.GetLogger().Panic("server panic error", err)
 	}
 }

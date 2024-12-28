@@ -62,7 +62,7 @@ func Logger(next http.Handler) http.Handler {
 
 		duration := time.Since(start)
 
-		logger := container.GetLogger().Sugar()
+		logger := container.GetLogger()
 		logger.Infoln(
 			"uri", uri,
 			"method", method,
@@ -75,7 +75,7 @@ func Logger(next http.Handler) http.Handler {
 
 func GzipMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		logger := container.GetLogger().Sugar()
+		logger := container.GetLogger()
 
 		contentEncoding := r.Header.Get("Content-Encoding")
 		sendsGzip := strings.Contains(contentEncoding, "gzip")

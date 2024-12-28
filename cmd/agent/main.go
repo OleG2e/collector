@@ -6,6 +6,6 @@ import (
 )
 
 func main() {
-	container.InitContainer()
+	container.InitAgentContainer()
 	storage.RunMonitor()
 }

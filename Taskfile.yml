@@ -1,9 +1,26 @@
 version: '3'
 
 tasks:
-  run:
+  build:
+    deps:
+      - build_agent
+      - build_server
+  build_server:
     cmds:
-      - cd cmd/server && go build -race -buildvcs=false -o server && ./server && cd ../..  && cd cmd/agent && go build -race -buildvcs=false -o agent && ./agent
+      - cd cmd/server && go build -race -buildvcs=false -o server
+  build_agent:
+    cmds:
+      - cd cmd/agent && go build -race -buildvcs=false -o agent
+  run_agent:
+    deps:
+      - build_agent
+    cmds:
+      - cd cmd/agent && ./agent
+  run_server:
+    deps:
+      - build_server
+    cmds:
+      - cd cmd/server && ./server
   tests:
     cmds:
       - task: test1
@@ -14,6 +31,7 @@ tasks:
       - task: test6
       - task: test7
       - task: test8
+      - task: test9
       - echo "Tests are done"
   test1:
     cmds:
@@ -39,3 +57,6 @@ tasks:
   test8:
     cmds:
       - cd cmd/server && go build -buildvcs=false -o server && cd ../.. && ./metricstest -test.v -test.run=TestIteration8  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port 8080
+  test9:
+    cmds:
+      - cd cmd/server && go build -buildvcs=false -o server && cd ../.. && ./metricstest -test.v -test.run=TestIteration9  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port 8080 -file-storage-path=..

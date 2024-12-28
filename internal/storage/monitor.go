@@ -49,7 +49,7 @@ func (s *monitorStorage) incrementPollCount() {
 }
 
 func (s *monitorStorage) initSendTicker() {
-	ticker := time.NewTicker(container.GetConfig().GetReportIntervalDuration())
+	ticker := time.NewTicker(container.GetAgentConfig().GetReportIntervalDuration())
 	go func() {
 		for range ticker.C {
 			sendGaugeDataErr := s.sendGaugeData()
@@ -72,7 +72,7 @@ func RunMonitor() {
 	initMonitor()
 	for {
 		monitor.refreshStats()
-		time.Sleep(container.GetConfig().GetPollIntervalDuration())
+		time.Sleep(container.GetAgentConfig().GetPollIntervalDuration())
 	}
 }
 
@@ -148,7 +148,7 @@ func initMonitor() {
 }
 
 func (s *monitorStorage) sendGaugeData() error {
-	address := container.GetConfig().GetAddress()
+	address := container.GetAgentConfig().GetAddress()
 	url := "http://" + address + "/update/"
 	for _, form := range s.getStatForms() {
 		formMarshalled, marshErr := json.Marshal(form)
@@ -199,7 +199,7 @@ func (s *monitorStorage) getPollCount() *int64 {
 }
 
 func (s *monitorStorage) sendCounterData() error {
-	address := container.GetConfig().GetAddress()
+	address := container.GetAgentConfig().GetAddress()
 	url := fmt.Sprintf("http://%s/update/", address)
 
 	form := network.MetricForm{

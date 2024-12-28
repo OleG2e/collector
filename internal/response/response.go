@@ -29,7 +29,7 @@ func Send(writer http.ResponseWriter, statusCode int, data any) {
 
 	err := json.NewEncoder(writer).Encode(data)
 	if err != nil {
-		logger := container.GetLogger().Sugar()
+		logger := container.GetLogger()
 		logger.Errorln("error encoding response", err)
 		return
 	}

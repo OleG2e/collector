@@ -15,67 +15,100 @@ import (
 const (
 	defaultReportIntervalSeconds = 10
 	defaultPollIntervalSeconds   = 2
+	defaultStoreIntervalSeconds  = 300
 )
 
 type (
-	Container struct {
-		Config *Config
-		Logger *zap.Logger
+	AgentContainer struct {
+		Config *AgentConfig
 	}
-	Config struct {
+	ServerContainer struct {
+		Config *ServerConfig
+	}
+	AgentConfig struct {
 		Address        string `env:"ADDRESS"`
 		ReportInterval int    `env:"REPORT_INTERVAL"`
 		PollInterval   int    `env:"POLL_INTERVAL"`
 	}
+	ServerConfig struct {
+		Address         string `env:"ADDRESS"`
+		StoreInterval   int    `env:"STORE_INTERVAL"`
+		FileStoragePath string `env:"FILE_STORAGE_PATH"`
+		Restore         bool   `env:"RESTORE"`
+	}
 )
 
 var (
-	appContainer *Container
-	once         sync.Once
+	appAgentContainer  *AgentContainer
+	appServerContainer *ServerContainer
+	logger             *zap.SugaredLogger
+	once               sync.Once
 )
 
-func InitContainer() {
+func InitAgentContainer() {
 	once.Do(func() {
-		config, err := initAppConfig()
+		config, err := initAppAgentConfig()
 		if err != nil {
 			log.Panic(err)
 		}
 
-		logger := zap.Must(zap.NewDevelopment())
+		appAgentContainer = &AgentContainer{Config: config}
 
-		defer func(logger *zap.Logger) {
-			syncErr := logger.Sync()
-			if syncErr != nil {
-				if errors.Is(syncErr, syscall.EINVAL) {
-					// Sync is not supported on os.Stderr / os.Stdout on all platforms.
-					return
-				}
-				logger.Error("Failed to sync logger", zap.Error(syncErr))
-			}
-		}(logger)
+		initLogger()
 
-		appContainer = &Container{Config: config, Logger: logger}
-
-		logger.Sugar().Debug("init container success")
+		GetLogger().Debug("init agent container success")
 	})
 }
 
-func GetConfig() *Config {
-	return appContainer.Config
+func InitServerContainer() {
+	once.Do(func() {
+		config, err := initAppServerConfig()
+		if err != nil {
+			log.Panic(err)
+		}
+
+		appServerContainer = &ServerContainer{Config: config}
+
+		initLogger()
+
+		GetLogger().Debug("init server container success")
+	})
 }
 
-func GetLogger() *zap.Logger {
-	return appContainer.Logger
+func initLogger() {
+	logger = zap.Must(zap.NewDevelopment()).Sugar()
+	defer func(logger *zap.SugaredLogger) {
+		syncErr := logger.Sync()
+		if syncErr != nil {
+			if errors.Is(syncErr, syscall.EINVAL) {
+				// Sync is not supported on os.Stderr / os.Stdout on all platforms.
+				return
+			}
+			logger.Error("Failed to sync logger", zap.Error(syncErr))
+		}
+	}(logger)
 }
 
-func initAppConfig() (*Config, error) {
+func GetAgentConfig() *AgentConfig {
+	return appAgentContainer.Config
+}
+
+func GetServerConfig() *ServerConfig {
+	return appServerContainer.Config
+}
+
+func GetLogger() *zap.SugaredLogger {
+	return logger
+}
+
+func initAppAgentConfig() (*AgentConfig, error) {
 	var (
 		addr string
 		ri   int
 		pi   int
 	)
 
-	c := Config{}
+	c := AgentConfig{}
 
 	err := env.Parse(&c)
 	if err != nil {
@@ -101,14 +134,65 @@ func initAppConfig() (*Config, error) {
 	return &c, nil
 }
 
-func (c Config) GetAddress() string {
+func initAppServerConfig() (*ServerConfig, error) {
+	var (
+		addr string
+		fs   string
+		si   int
+		r    bool
+	)
+
+	c := ServerConfig{}
+
+	err := env.Parse(&c)
+	if err != nil {
+		return nil, err
+	}
+
+	flag.StringVar(&addr, "a", "localhost:8080", "server host:port")
+	flag.IntVar(&si, "i", defaultStoreIntervalSeconds, "store interval")
+	flag.StringVar(&fs, "f", "../", "file storage path")
+	flag.BoolVar(&r, "r", true, "restore previous data")
+
+	flag.Parse()
+
+	if c.Address == "" {
+		c.Address = addr
+	}
+	if c.FileStoragePath == "" {
+		c.FileStoragePath = fs
+	}
+
+	if c.StoreInterval == 0 {
+		c.StoreInterval = si
+	}
+	if !c.Restore {
+		c.Restore = r
+	}
+
+	return &c, nil
+}
+
+func (c *AgentConfig) GetAddress() string {
 	return c.Address
 }
 
-func (c Config) GetReportIntervalDuration() time.Duration {
+func (c *ServerConfig) GetAddress() string {
+	return c.Address
+}
+
+func (c *AgentConfig) GetReportIntervalDuration() time.Duration {
 	return time.Duration(c.ReportInterval) * time.Second
 }
 
-func (c Config) GetPollIntervalDuration() time.Duration {
+func (c *AgentConfig) GetPollIntervalDuration() time.Duration {
 	return time.Duration(c.PollInterval) * time.Second
+}
+
+func (c *ServerConfig) GetStoreIntervalDuration() time.Duration {
+	return time.Duration(c.StoreInterval) * time.Second
+}
+
+func (c *ServerConfig) GetStoreInterval() int {
+	return c.StoreInterval
 }

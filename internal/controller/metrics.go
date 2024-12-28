@@ -13,7 +13,7 @@ import (
 func UpdateMetric() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		form, decodeErr := network.NewFormByRequest(r)
-		logger := container.GetLogger().Sugar()
+		logger := container.GetLogger()
 
 		if decodeErr != nil {
 			logger.Errorln("decodeErr", decodeErr)
@@ -24,6 +24,9 @@ func UpdateMetric() http.HandlerFunc {
 		ms := storage.GetStorage()
 		if form.IsGaugeType() {
 			ms.SetGaugeValue(form.ID, *form.Value)
+
+			syncStateLogger()
+
 			response.Send(w, http.StatusOK, form)
 			return
 		}
@@ -37,6 +40,8 @@ func UpdateMetric() http.HandlerFunc {
 			}
 			form.Delta = &val
 
+			syncStateLogger()
+
 			response.Send(w, http.StatusOK, form)
 			return
 		}
@@ -48,7 +53,7 @@ func UpdateMetric() http.HandlerFunc {
 func GetMetric() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		form, decodeErr := network.NewFormByRequest(r)
-		logger := container.GetLogger().Sugar()
+		logger := container.GetLogger()
 
 		if decodeErr != nil {
 			logger.Errorln("decodeErr", decodeErr)
@@ -90,6 +95,8 @@ func UpdateCounter() http.HandlerFunc {
 
 		ms.AddCounterValue(metric, value)
 
+		syncStateLogger()
+
 		response.Success(w)
 	}
 }
@@ -106,6 +113,8 @@ func UpdateGauge() http.HandlerFunc {
 		ms := storage.GetStorage()
 
 		ms.SetGaugeValue(metric, value)
+
+		syncStateLogger()
 
 		response.Success(w)
 	}
@@ -142,5 +151,15 @@ func GetGauge() http.HandlerFunc {
 		}
 
 		response.Send(w, http.StatusOK, val)
+	}
+}
+
+func syncStateLogger() {
+	storeInterval := container.GetServerConfig().GetStoreInterval()
+	if storeInterval == 0 {
+		err := storage.GetStorage().FlushStorage()
+		if err != nil {
+			container.GetLogger().Error(err)
+		}
 	}
 }
