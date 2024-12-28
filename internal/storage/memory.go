@@ -88,7 +88,6 @@ func InitStorage() {
 		storage = NewMemStorage()
 
 		storeInterval := container.GetServerConfig().GetStoreIntervalDuration()
-		container.GetLogger().Debug("storeInterval", storeInterval)
 
 		if storeInterval > 0 {
 			storage.initFlushStorageTicker(storeInterval)
