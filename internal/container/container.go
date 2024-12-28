@@ -151,7 +151,7 @@ func initAppServerConfig() (*ServerConfig, error) {
 
 	flag.StringVar(&addr, "a", "localhost:8080", "server host:port")
 	flag.IntVar(&si, "i", defaultStoreIntervalSeconds, "store interval")
-	flag.StringVar(&fs, "f", "../", "file storage path")
+	flag.StringVar(&fs, "f", ".", "file storage path")
 	flag.BoolVar(&r, "r", true, "restore previous data")
 
 	flag.Parse()
