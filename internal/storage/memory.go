@@ -74,7 +74,7 @@ func NewMemStorage() *MemStorage {
 		Metrics: Metrics{Counters: make(map[string]int64), Gauges: make(map[string]float64)},
 		mx:      &sync.RWMutex{},
 	}
-	ms.openDbFile()
+	ms.openDBFile()
 
 	return ms
 }
@@ -155,7 +155,7 @@ func (ms *MemStorage) FlushStorage() error {
 	}
 
 	if ms.DBFile == nil {
-		ms.openDbFile()
+		ms.openDBFile()
 
 		defer func(file *os.File) {
 			fileCloseErr := file.Close()
@@ -182,7 +182,7 @@ func (ms *MemStorage) FlushStorage() error {
 	return nil
 }
 
-func (ms *MemStorage) openDbFile() {
+func (ms *MemStorage) openDBFile() {
 	path := container.GetServerConfig().FileStoragePath
 	file, fileErr := os.OpenFile(path+"/"+storageFilename, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o666)
 
