@@ -1,61 +1,53 @@
 package main
 
 import (
-	"net/http"
+	"context"
+	"log"
 
+	"github.com/OleG2e/collector/internal/config"
 	"github.com/OleG2e/collector/internal/controller"
-	"github.com/OleG2e/collector/internal/response"
 	"github.com/OleG2e/collector/internal/storage"
-
-	"github.com/OleG2e/collector/internal/middleware"
-
-	"github.com/OleG2e/collector/internal/container"
-	"github.com/go-chi/chi/v5"
+	"github.com/OleG2e/collector/pkg/logging"
+	"go.uber.org/zap"
 )
 
 func main() {
-	container.InitServerContainer()
+	l, zapErr := logging.NewZapLogger(zap.InfoLevel)
 
-	storage.InitStorage()
+	if zapErr != nil {
+		log.Panic(zapErr)
+	}
+
+	ctx := context.Background()
+	ctx = l.WithContextFields(ctx, zap.String("app", "server"))
+
+	defer l.Sync()
+
+	conf := config.NewServerConfig(ctx, l)
+
+	l.SetLevel(conf.GetLogLevel())
+
+	store := storage.NewMemStorage(ctx, l, conf)
+
 	defer func(storage *storage.MemStorage) {
-		err := storage.FlushStorage()
-		if err != nil {
-			container.GetLogger().Error(err)
+		if flushErr := storage.FlushStorage(); flushErr != nil {
+			l.ErrorCtx(ctx, "flush storage error", zap.Error(flushErr))
 		}
-	}(storage.GetStorage())
+	}(store)
 
-	router := chi.NewRouter()
-	router.Use(middleware.GzipMiddleware)
-	router.Use(middleware.Logger)
+	storeInterval := conf.GetStoreIntervalDuration()
 
-	router.Group(func(r chi.Router) {
-		r.Get("/", func(w http.ResponseWriter, req *http.Request) {
-			w.Header().Add("Content-Type", "text/html")
-			w.WriteHeader(http.StatusOK)
-		})
-	})
+	if storeInterval > 0 {
+		store.InitFlushStorageTicker(storeInterval)
+	}
 
-	router.Route("/", func(r chi.Router) {
-		r.Use(middleware.AllowedMetricsOnly)
-		r.Post("/update/", controller.UpdateMetric())
-		r.Post("/value/", controller.GetMetric())
+	if conf.Restore {
+		store.RestoreStorage()
+	}
 
-		r.Get("/value/counter/{metric}", controller.GetCounter())
-		r.Get("/value/gauge/{metric}", controller.GetGauge())
+	metricsController := controller.New(l, ctx, store, conf)
 
-		r.Post("/update/counter/{metric}/{value}", controller.UpdateCounter())
-		r.Post("/update/gauge/{metric}/{value}", controller.UpdateGauge())
-		r.Post("/update/counter/", router.NotFoundHandler())
-		r.Post("/update/gauge/", router.NotFoundHandler())
-
-		r.Post("/", func(w http.ResponseWriter, req *http.Request) {
-			response.Success(w)
-		})
-	})
-
-	address := container.GetServerConfig().GetAddress()
-
-	if err := http.ListenAndServe(address, router); err != nil {
-		container.GetLogger().Panic("server panic error", err)
+	if err := metricsController.Routes().ServeHTTP(conf); err != nil {
+		l.PanicCtx(ctx, "failed to start server", zap.Error(err))
 	}
 }

@@ -2,25 +2,26 @@ package storage
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
 	"sync"
 	"time"
 
-	"github.com/OleG2e/collector/internal/container"
+	"github.com/OleG2e/collector/internal/config"
+	"github.com/OleG2e/collector/pkg/logging"
+	"go.uber.org/zap"
 )
 
 const storageFilename = "storage.db"
 
-var (
-	storage *MemStorage
-	once    sync.Once
-)
-
 type MemStorage struct {
 	Metrics Metrics
 	DBFile  *os.File
+	conf    *config.ServerConfig
+	l       *logging.ZapLogger
+	ctx     context.Context
 	mx      *sync.RWMutex
 }
 
@@ -69,57 +70,40 @@ func (ms *MemStorage) SetGaugeValue(metricName string, value float64) {
 	ms.Metrics.Gauges[metricName] = value
 }
 
-func NewMemStorage() *MemStorage {
+func NewMemStorage(ctx context.Context, l *logging.ZapLogger, conf *config.ServerConfig) *MemStorage {
 	ms := &MemStorage{
-		Metrics: Metrics{Counters: make(map[string]int64), Gauges: make(map[string]float64)},
-		mx:      &sync.RWMutex{},
+		Metrics: Metrics{
+			Counters: make(map[string]int64),
+			Gauges:   make(map[string]float64),
+		},
+		l:    l,
+		ctx:  ctx,
+		conf: conf,
+		mx:   &sync.RWMutex{},
 	}
 	ms.openDBFile()
 
 	return ms
 }
 
-func GetStorage() *MemStorage {
-	return storage
-}
-
-func InitStorage() {
-	once.Do(func() {
-		storage = NewMemStorage()
-
-		storeInterval := container.GetServerConfig().GetStoreIntervalDuration()
-
-		if storeInterval > 0 {
-			storage.initFlushStorageTicker(storeInterval)
-		}
-
-		if container.GetServerConfig().Restore {
-			storage.restoreStorage()
-		}
-
-		container.GetLogger().Debug("init storage success")
-	})
-}
-
-func (ms *MemStorage) initFlushStorageTicker(storeInterval time.Duration) {
+func (ms *MemStorage) InitFlushStorageTicker(storeInterval time.Duration) {
 	ticker := time.NewTicker(storeInterval)
 	go func() {
 		for range ticker.C {
 			if err := ms.FlushStorage(); err != nil {
-				container.GetLogger().Errorf("flush storage error: %v", err)
+				ms.l.ErrorCtx(ms.ctx, "flush storage error", zap.Error(err))
 			}
 		}
 	}()
 }
 
-func (ms *MemStorage) restoreStorage() {
+func (ms *MemStorage) RestoreStorage() {
 	ms.mx.Lock()
 	defer ms.mx.Unlock()
 
 	reader := bufio.NewReader(ms.DBFile)
 	dec := json.NewDecoder(reader)
 
-	logger := container.GetLogger()
 	var states []Metrics
 	for dec.More() {
 		var decodedMetric Metrics
@@ -127,7 +111,7 @@ func (ms *MemStorage) restoreStorage() {
 		err := dec.Decode(&decodedMetric)
 
 		if err != nil {
-			logger.Fatal(err)
+			ms.l.FatalCtx(ms.ctx, "restore storage error", zap.Error(err))
 		}
 
 		states = append(states, decodedMetric)
@@ -140,7 +124,7 @@ func (ms *MemStorage) restoreStorage() {
 
 		return
 	}
-	logger.Infoln("no restore metrics found")
+	ms.l.InfoCtx(ms.ctx, "no restore metrics found")
 }
 
 func (ms *MemStorage) FlushStorage() error {
@@ -159,7 +143,7 @@ func (ms *MemStorage) FlushStorage() error {
 		defer func(file *os.File) {
 			fileCloseErr := file.Close()
 			if fileCloseErr != nil && !errors.Is(fileCloseErr, os.ErrClosed) {
-				container.GetLogger().Error(fileCloseErr)
+				ms.l.ErrorCtx(ms.ctx, "file close error", zap.Error(fileCloseErr))
 			}
 			ms.DBFile = nil
 		}(ms.DBFile)
@@ -167,7 +151,7 @@ func (ms *MemStorage) FlushStorage() error {
 
 	_, err = ms.DBFile.Write(data)
 
-	container.GetLogger().Infoln("flush storage")
+	ms.l.InfoCtx(ms.ctx, "flush storage")
 
 	if err != nil {
 		return err
@@ -182,11 +166,11 @@ func (ms *MemStorage) FlushStorage() error {
 }
 
 func (ms *MemStorage) openDBFile() {
-	path := container.GetServerConfig().FileStoragePath
+	path := ms.conf.FileStoragePath
 	file, fileErr := os.OpenFile(path+"/"+storageFilename, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o666)
 
 	if fileErr != nil {
-		container.GetLogger().Fatal(fileErr)
+		ms.l.FatalCtx(ms.ctx, "open DB file error", zap.Error(fileErr))
 	}
 
 	ms.DBFile = file

@@ -7,7 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OleG2e/collector/internal/container"
+	"github.com/OleG2e/collector/pkg/logging"
+	"go.uber.org/zap"
 )
 
 type (
@@ -42,82 +43,106 @@ func (w gzipWriter) Write(b []byte) (int, error) {
 	return w.Writer.Write(b)
 }
 
-func Logger(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
+func Logger(l *logging.ZapLogger) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		fn := func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
 
-		uri := r.RequestURI
-		method := r.Method
+			uri := r.RequestURI
+			method := r.Method
 
-		responseData := &responseData{
-			status: 0,
-			size:   0,
+			responseData := &responseData{
+				status: 0,
+				size:   0,
+			}
+			lw := loggingResponseWriter{
+				ResponseWriter: w,
+				responseData:   responseData,
+			}
+
+			next.ServeHTTP(&lw, r)
+
+			duration := time.Since(start)
+
+			l.InfoCtx(
+				r.Context(),
+				"request info",
+				zap.String("uri", uri),
+				zap.String("method", method),
+				zap.Duration("duration", duration),
+				zap.Int("status", responseData.status),
+				zap.Int("size", responseData.size),
+			)
 		}
-		lw := loggingResponseWriter{
-			ResponseWriter: w,
-			responseData:   responseData,
-		}
 
-		next.ServeHTTP(&lw, r)
-
-		duration := time.Since(start)
-
-		logger := container.GetLogger()
-		logger.Infoln(
-			"uri", uri,
-			"method", method,
-			"duration", duration,
-			"status", responseData.status,
-			"size", responseData.size,
-		)
-	})
+		return http.HandlerFunc(fn)
+	}
 }
 
-func GzipMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		logger := container.GetLogger()
+func GzipMiddleware(l *logging.ZapLogger) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		fn := func(w http.ResponseWriter, r *http.Request) {
+			contentEncoding := r.Header.Get("Content-Encoding")
+			sendsGzip := strings.Contains(contentEncoding, "gzip")
+			if sendsGzip {
+				gzReader, gzipReadErr := gzip.NewReader(r.Body)
+				if gzipReadErr != nil {
+					l.ErrorCtx(r.Context(), "compress read error", zap.Error(gzipReadErr))
+					return
+				}
+				r.Body = gzReader
+				defer func(gzReader *gzip.Reader) {
+					gzReaderErr := gzReader.Close()
+					if gzReaderErr != nil {
+						l.ErrorCtx(r.Context(), "compress close read error", zap.Error(gzReaderErr))
+					}
+				}(gzReader)
+			}
 
-		contentEncoding := r.Header.Get("Content-Encoding")
-		sendsGzip := strings.Contains(contentEncoding, "gzip")
-		if sendsGzip {
-			gzReader, gzipReadErr := gzip.NewReader(r.Body)
-			if gzipReadErr != nil {
-				logger.Errorln("compress read error", gzipReadErr)
+			contentType := r.Header.Get("Content-Type")
+			enableEncoding := strings.Contains(r.Header.Get("Accept-Encoding"), "gzip")
+			if !enableEncoding || !isSupportedContentType(contentType) {
+				next.ServeHTTP(w, r)
 				return
 			}
-			r.Body = gzReader
-			defer func(gzReader *gzip.Reader) {
-				gzReaderErr := gzReader.Close()
-				if gzReaderErr != nil {
-					logger.Errorln("compress close read error", gzReaderErr)
-				}
-			}(gzReader)
-		}
 
-		contentType := r.Header.Get("Content-Type")
-		enableEncoding := strings.Contains(r.Header.Get("Accept-Encoding"), "gzip")
-		if !enableEncoding || !isSupportedContentType(contentType) {
-			next.ServeHTTP(w, r)
-			return
-		}
+			gzWriter, err := gzip.NewWriterLevel(w, gzip.BestSpeed)
 
-		gzWriter, err := gzip.NewWriterLevel(w, gzip.BestSpeed)
-
-		if err != nil {
-			logger.Errorln("compress error", err)
-			return
-		}
-		defer func(gz *gzip.Writer) {
-			closeGZipErr := gz.Close()
-			if closeGZipErr != nil {
-				logger.Errorln("close compress error", err)
+			if err != nil {
+				l.ErrorCtx(r.Context(), "compress error", zap.Error(err))
+				return
 			}
-		}(gzWriter)
+			defer func(gz *gzip.Writer) {
+				closeGZipErr := gz.Close()
+				if closeGZipErr != nil {
+					l.ErrorCtx(r.Context(), "close compress error", zap.Error(closeGZipErr))
+				}
+			}(gzWriter)
 
-		w.Header().Set("Content-Encoding", "gzip")
+			w.Header().Set("Content-Encoding", "gzip")
 
-		next.ServeHTTP(gzipWriter{ResponseWriter: w, Writer: gzWriter}, r)
-	})
+			next.ServeHTTP(gzipWriter{ResponseWriter: w, Writer: gzWriter}, r)
+		}
+
+		return http.HandlerFunc(fn)
+	}
+}
+
+func Recover(l *logging.ZapLogger) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		fn := func(w http.ResponseWriter, r *http.Request) {
+			defer func() {
+				if rec := recover(); rec != nil {
+					l.PanicCtx(r.Context(), "recovered from panic", zap.Any("panic", rec))
+					http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+				}
+			}()
+
+			next.ServeHTTP(w, r)
+		}
+
+		return http.HandlerFunc(fn)
+	}
 }
 
 func isSupportedContentType(contentType string) bool {
