@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-const zapFieldsKey = "zapFields"
+type zapFieldsKey string
 
 type ZapFields map[string]zap.Field
 
@@ -31,10 +31,6 @@ type ZapLogger struct {
 	level  zap.AtomicLevel
 }
 
-type ZapLoggerConfig struct {
-	level string `env:"LOG_LEVEL" envDefault:"info"`
-}
-
 func NewZapLogger(level zapcore.Level) (*ZapLogger, error) {
 	atomic := zap.NewAtomicLevelAt(level)
 	defSettings := defaultSettings(atomic)
@@ -51,13 +47,13 @@ func NewZapLogger(level zapcore.Level) (*ZapLogger, error) {
 }
 
 func (z *ZapLogger) WithContextFields(ctx context.Context, fields ...zap.Field) context.Context {
-	ctxFields, _ := ctx.Value(zapFieldsKey).(ZapFields)
+	ctxFields, _ := ctx.Value(zapFieldsKey("zapFields")).(ZapFields)
 	if ctxFields == nil {
 		ctxFields = make(ZapFields)
 	}
 
 	merged := ctxFields.Append(fields...)
-	return context.WithValue(ctx, zapFieldsKey, merged)
+	return context.WithValue(ctx, zapFieldsKey("zapFields"), merged)
 }
 
 func (z *ZapLogger) maskField(f zap.Field) zap.Field {
@@ -80,7 +76,7 @@ func (z *ZapLogger) Sync() {
 }
 
 func (z *ZapLogger) withCtxFields(ctx context.Context, fields ...zap.Field) []zap.Field {
-	ctxFields, ok := ctx.Value(zapFieldsKey).(ZapFields)
+	ctxFields, ok := ctx.Value(zapFieldsKey("zapFields")).(ZapFields)
 	if ok {
 		ctxFields.Append(fields...)
 	} else {

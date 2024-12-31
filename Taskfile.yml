@@ -5,6 +5,10 @@ tasks:
     deps:
       - build_agent
       - build_server
+  statictest:
+    silent: true
+    cmds:
+      - go vet -vettool=$(which statictest) ./...
   build_server:
     cmds:
       - cd cmd/server && go build -race -buildvcs=false -o server
