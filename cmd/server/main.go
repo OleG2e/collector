@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	l, zapErr := logging.NewZapLogger(zap.InfoLevel)
+	l, zapErr := logging.NewZapLogger(zap.DebugLevel)
 
 	if zapErr != nil {
 		log.Panic(zapErr)

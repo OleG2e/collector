@@ -31,7 +31,7 @@ type MonitorStorage struct {
 	ctx          context.Context
 }
 
-func NewMonitor(ctx context.Context, l *logging.ZapLogger, config *config.AgentConfig) *MonitorStorage {
+func NewMonitor(ctx context.Context, l *logging.ZapLogger, agentConfig *config.AgentConfig) *MonitorStorage {
 	g := make(map[string]any)
 	ms := &runtime.MemStats{}
 	mx := &sync.RWMutex{}
@@ -44,7 +44,7 @@ func NewMonitor(ctx context.Context, l *logging.ZapLogger, config *config.AgentC
 		l:            l,
 		ctx:          ctx,
 		httpClient:   httpClient,
-		agentConfig:  config,
+		agentConfig:  agentConfig,
 	}
 }
 
@@ -88,8 +88,8 @@ func (s *MonitorStorage) initSendTicker() {
 	}()
 }
 
-func RunMonitor(ctx context.Context, l *logging.ZapLogger, config *config.AgentConfig) {
-	mon := NewMonitor(ctx, l, config)
+func RunMonitor(ctx context.Context, l *logging.ZapLogger, agentConfig *config.AgentConfig) {
+	mon := NewMonitor(ctx, l, agentConfig)
 	mon.initSendTicker()
 	for {
 		mon.refreshStats()
@@ -170,7 +170,7 @@ func (s *MonitorStorage) sendGaugeData() error {
 		}
 
 		reader := bytes.NewReader(formMarshalled)
-		req, reqErr := http.NewRequest(http.MethodPost, url, reader)
+		req, reqErr := http.NewRequestWithContext(s.ctx, http.MethodPost, url, reader)
 
 		if reqErr != nil {
 			return reqErr
@@ -226,7 +226,7 @@ func (s *MonitorStorage) sendCounterData() error {
 		return marshErr
 	}
 
-	req, reqErr := http.NewRequest(http.MethodPost, url, bytes.NewReader(formMarshalled))
+	req, reqErr := http.NewRequestWithContext(s.ctx, http.MethodPost, url, bytes.NewReader(formMarshalled))
 
 	if reqErr != nil {
 		return reqErr
