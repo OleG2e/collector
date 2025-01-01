@@ -36,6 +36,9 @@ func (c *Controller) Routes() *Controller {
 			w.Header().Add("Content-Type", "text/html")
 			w.WriteHeader(http.StatusOK)
 		})
+		r.Get("/ping", func(w http.ResponseWriter, req *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
 	})
 
 	c.router.Route("/", func(r chi.Router) {

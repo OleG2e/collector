@@ -125,7 +125,7 @@ func NewServerConfig(ctx context.Context, l *logging.ZapLogger) *ServerConfig {
 	flag.StringVar(&addr, "a", "localhost:8080", "server host:port")
 	flag.StringVar(&logLevel, "log_level", "info", "log level")
 	flag.IntVar(&si, "i", defaultStoreIntervalSeconds, "store interval")
-	flag.StringVar(&fs, "f", ".", "file storage path")
+	flag.StringVar(&fs, "f", "storage.db", "file storage path")
 	flag.BoolVar(&r, "r", true, "restore previous data")
 
 	flag.Parse()

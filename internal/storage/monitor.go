@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -72,6 +73,10 @@ func (s *MonitorStorage) initSendTicker() {
 	ticker := time.NewTicker(s.agentConfig.GetReportIntervalDuration())
 	go func() {
 		for range ticker.C {
+			ok := s.pingServer()
+			if ok != nil {
+				return
+			}
 			sendGaugeDataErr := s.sendGaugeData()
 			if sendGaugeDataErr != nil {
 				s.l.ErrorCtx(s.ctx, "send gauge error", zap.Error(sendGaugeDataErr))
@@ -199,6 +204,34 @@ func (s *MonitorStorage) sendGaugeData() error {
 		if respCloseErr != nil {
 			return respCloseErr
 		}
+	}
+
+	return nil
+}
+
+func (s *MonitorStorage) pingServer() error {
+	address := s.agentConfig.GetAddress()
+	url := "http://" + address + "/ping"
+
+	resp, clientErr := s.httpClient.Get(url)
+
+	if clientErr != nil {
+		return clientErr
+	}
+
+	_, bodyErr := io.ReadAll(resp.Body)
+
+	if bodyErr != nil {
+		return bodyErr
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.New("ping server error: " + resp.Status)
+	}
+
+	respCloseErr := resp.Body.Close()
+	if respCloseErr != nil {
+		return respCloseErr
 	}
 
 	return nil

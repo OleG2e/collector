@@ -14,8 +14,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const storageFilename = "storage.db"
-
 type MemStorage struct {
 	Metrics Metrics
 	DBFile  *os.File
@@ -166,8 +164,7 @@ func (ms *MemStorage) FlushStorage() error {
 }
 
 func (ms *MemStorage) openDBFile() {
-	path := ms.conf.FileStoragePath
-	file, fileErr := os.OpenFile(path+"/"+storageFilename, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o666)
+	file, fileErr := os.OpenFile(ms.conf.FileStoragePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o666)
 
 	if fileErr != nil {
 		ms.l.FatalCtx(ms.ctx, "open DB file error", zap.Error(fileErr))
