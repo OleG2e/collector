@@ -9,18 +9,21 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/OleG2e/collector/internal/config"
 	"github.com/OleG2e/collector/pkg/logging"
 	"go.uber.org/zap"
 )
 
 type MemStorage struct {
-	Metrics Metrics
-	DBFile  *os.File
-	conf    *config.ServerConfig
-	l       *logging.ZapLogger
-	ctx     context.Context
-	mx      *sync.RWMutex
+	Metrics  Metrics
+	DBFile   *os.File
+	conf     *config.ServerConfig
+	l        *logging.ZapLogger
+	ctx      context.Context
+	mx       *sync.RWMutex
+	PoolConn *pgxpool.Pool
 }
 
 type Metrics struct {
@@ -68,16 +71,17 @@ func (ms *MemStorage) SetGaugeValue(metricName string, value float64) {
 	ms.Metrics.Gauges[metricName] = value
 }
 
-func NewMemStorage(ctx context.Context, l *logging.ZapLogger, conf *config.ServerConfig) *MemStorage {
+func NewMemStorage(ctx context.Context, l *logging.ZapLogger, conf *config.ServerConfig, poolConn *pgxpool.Pool) *MemStorage {
 	ms := &MemStorage{
 		Metrics: Metrics{
 			Counters: make(map[string]int64),
 			Gauges:   make(map[string]float64),
 		},
-		l:    l,
-		ctx:  ctx,
-		conf: conf,
-		mx:   &sync.RWMutex{},
+		l:        l,
+		ctx:      ctx,
+		conf:     conf,
+		PoolConn: poolConn,
+		mx:       &sync.RWMutex{},
 	}
 	ms.openDBFile()
 

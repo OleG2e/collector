@@ -33,6 +33,10 @@ func (resp *Response) BadRequestError(writer http.ResponseWriter, e string) {
 	http.Error(writer, e, http.StatusBadRequest)
 }
 
+func (resp *Response) ServerError(writer http.ResponseWriter, e string) {
+	http.Error(writer, e, http.StatusInternalServerError)
+}
+
 func setStatusCode(writer http.ResponseWriter, statusCode int) {
 	writer.WriteHeader(statusCode)
 }

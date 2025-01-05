@@ -4,6 +4,8 @@ import (
 	"context"
 	"log"
 
+	"github.com/OleG2e/collector/pkg/db"
+
 	"github.com/OleG2e/collector/internal/config"
 	"github.com/OleG2e/collector/internal/controller"
 	"github.com/OleG2e/collector/internal/storage"
@@ -27,7 +29,13 @@ func main() {
 
 	l.SetLevel(conf.GetLogLevel())
 
-	store := storage.NewMemStorage(ctx, l, conf)
+	poolConn, err := db.NewPoolConn(ctx, conf)
+
+	if err != nil {
+		l.ErrorCtx(ctx, "Unable to connect to database", zap.Error(err))
+	}
+
+	store := storage.NewMemStorage(ctx, l, conf, poolConn)
 
 	defer func(storage *storage.MemStorage) {
 		if flushErr := storage.FlushStorage(); flushErr != nil {

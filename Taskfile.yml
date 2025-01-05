@@ -64,3 +64,6 @@ tasks:
   test9:
     cmds:
       - cd cmd/server && go build -buildvcs=false -o server && cd ../.. && metricstest -test.v -test.run=TestIteration9  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080 -file-storage-path=storage.db
+  test10:
+    cmds:
+      - cd cmd/server && go build -buildvcs=false -o server && cd ../.. && metricstest -test.v -test.run=TestIteration10  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080 -file-storage-path=storage.db -database-dsn='postgres://root:root@localhost:5432/collector?sslmode=disable'
