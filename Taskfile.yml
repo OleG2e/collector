@@ -36,6 +36,10 @@ tasks:
       - task: test7
       - task: test8
       - task: test9
+      - task: test10
+      - task: test11
+      - task: test12
+      - task: test13
       - echo "Tests are done"
   test1:
     cmds:

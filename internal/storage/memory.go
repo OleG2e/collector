@@ -1,12 +1,7 @@
 package storage
 
 import (
-	"bufio"
 	"context"
-	"encoding/json"
-	"errors"
-	"io"
-	"os"
 	"sync"
 	"time"
 
@@ -17,19 +12,40 @@ import (
 	"go.uber.org/zap"
 )
 
+type StoreType int
+
+const (
+	fileStore StoreType = iota
+	dbStore
+)
+
+type StoreAlgo interface {
+	store(m *Metrics) error
+	restore() (*Metrics, error)
+	GetStoreType() StoreType
+}
+
 type MemStorage struct {
-	Metrics  Metrics
-	DBFile   *os.File
-	conf     *config.ServerConfig
-	l        *logging.ZapLogger
-	ctx      context.Context
-	mx       *sync.RWMutex
-	PoolConn *pgxpool.Pool
+	Metrics   *Metrics
+	conf      *config.ServerConfig
+	l         *logging.ZapLogger
+	ctx       context.Context
+	mx        *sync.RWMutex
+	poolConn  *pgxpool.Pool
+	storeAlgo StoreAlgo
 }
 
 type Metrics struct {
 	Counters map[string]int64   `json:"counters"`
 	Gauges   map[string]float64 `json:"gauges"`
+}
+
+func (ms *MemStorage) store() error {
+	return ms.storeAlgo.store(ms.Metrics)
+}
+
+func (ms *MemStorage) setStoreAlgo(sa StoreAlgo) {
+	ms.storeAlgo = sa
 }
 
 func (ms *MemStorage) AddCounterValue(metricName string, value int64) {
@@ -72,22 +88,33 @@ func (ms *MemStorage) SetGaugeValue(metricName string, value float64) {
 	ms.Metrics.Gauges[metricName] = value
 }
 
-func NewMemStorage(ctx context.Context, l *logging.ZapLogger, conf *config.ServerConfig, poolConn *pgxpool.Pool) *MemStorage {
-	ms := &MemStorage{
-		Metrics:  newMetrics(),
-		l:        l,
-		ctx:      ctx,
-		conf:     conf,
-		PoolConn: poolConn,
-		mx:       &sync.RWMutex{},
+func GetStoreAlgo(ctx context.Context, l *logging.ZapLogger, conf *config.ServerConfig, poolConn *pgxpool.Pool) StoreAlgo {
+	if conf.GetDSN() != "" {
+		return NewDBStorage(ctx, l, poolConn)
 	}
-	ms.openDBFile()
+	return NewFileStorage(ctx, l, conf)
+}
+
+func NewMemStorage(
+	ctx context.Context,
+	l *logging.ZapLogger,
+	conf *config.ServerConfig,
+	storeAlgo StoreAlgo,
+) *MemStorage {
+	ms := &MemStorage{
+		Metrics:   newMetrics(),
+		l:         l,
+		ctx:       ctx,
+		conf:      conf,
+		storeAlgo: storeAlgo,
+		mx:        &sync.RWMutex{},
+	}
 
 	return ms
 }
 
-func newMetrics() Metrics {
-	return Metrics{
+func newMetrics() *Metrics {
+	return &Metrics{
 		Counters: make(map[string]int64),
 		Gauges:   make(map[string]float64),
 	}
@@ -104,57 +131,29 @@ func (ms *MemStorage) InitFlushStorageTicker(storeInterval time.Duration) {
 	}()
 }
 
-func (ms *MemStorage) RestoreStorage() {
+func (ms *MemStorage) RestoreStorage() error {
 	ms.mx.Lock()
 	defer ms.mx.Unlock()
 
-	reader := bufio.NewReader(ms.DBFile)
-	dec := json.NewDecoder(reader)
-
-	lastState := newMetrics()
-
-	if err := dec.Decode(&lastState); err != nil && err != io.EOF {
-		ms.l.FatalCtx(ms.ctx, "restore storage error", zap.Error(err))
+	metrics, err := ms.storeAlgo.restore()
+	if err != nil {
+		return err
 	}
 
-	ms.Metrics = lastState
+	if metrics != nil {
+		ms.Metrics = metrics
+	}
+
+	return nil
 }
 
 func (ms *MemStorage) FlushStorage() error {
 	ms.mx.Lock()
 	defer ms.mx.Unlock()
 
-	data, err := json.Marshal(&ms.Metrics)
-
-	if err != nil {
-		return err
-	}
-
-	if ms.DBFile == nil {
-		ms.openDBFile()
-
-		defer func(file *os.File) {
-			fileCloseErr := file.Close()
-			if fileCloseErr != nil && !errors.Is(fileCloseErr, os.ErrClosed) {
-				ms.l.ErrorCtx(ms.ctx, "file close error", zap.Error(fileCloseErr))
-			}
-			ms.DBFile = nil
-		}(ms.DBFile)
-	}
-
-	_, err = ms.DBFile.WriteAt(data, 0)
-
-	ms.l.InfoCtx(ms.ctx, "flush storage")
-
-	return err
+	return ms.store()
 }
 
-func (ms *MemStorage) openDBFile() {
-	file, fileErr := os.OpenFile(ms.conf.FileStoragePath, os.O_RDWR|os.O_CREATE, 0o666)
-
-	if fileErr != nil {
-		ms.l.FatalCtx(ms.ctx, "open DB file error", zap.Error(fileErr))
-	}
-
-	ms.DBFile = file
+func (ms *MemStorage) GetPollConn() *pgxpool.Pool {
+	return ms.poolConn
 }

@@ -29,13 +29,20 @@ func main() {
 
 	l.SetLevel(conf.GetLogLevel())
 
-	poolConn, err := db.NewPoolConn(ctx, conf)
-
-	if err != nil {
-		l.ErrorCtx(ctx, "Unable to connect to database", zap.Error(err))
+	poolConn, dbErr := db.NewPoolConn(ctx, conf)
+	if poolConn != nil {
+		defer poolConn.Close()
 	}
 
-	store := storage.NewMemStorage(ctx, l, conf, poolConn)
+	if dbErr != nil {
+		l.WarnCtx(ctx, "Unable to connect to database", zap.Error(dbErr))
+	}
+
+	storeAlgo := storage.GetStoreAlgo(ctx, l, conf, poolConn)
+
+	l.DebugCtx(ctx, "Using store algo", zap.Int("algo", int(storeAlgo.GetStoreType())))
+
+	store := storage.NewMemStorage(ctx, l, conf, storeAlgo)
 
 	defer func(storage *storage.MemStorage) {
 		if flushErr := storage.FlushStorage(); flushErr != nil {
@@ -50,7 +57,10 @@ func main() {
 	}
 
 	if conf.Restore {
-		store.RestoreStorage()
+		restoreErr := store.RestoreStorage()
+		if restoreErr != nil {
+			l.ErrorCtx(ctx, "restore storage error", zap.Error(restoreErr))
+		}
 	}
 
 	metricsController := controller.New(l, ctx, store, conf)

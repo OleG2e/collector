@@ -49,12 +49,14 @@ func (c *Controller) UpdateMetric() http.HandlerFunc {
 
 func (c *Controller) PingDB() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		err := c.ms.PoolConn.Ping(r.Context())
-		if err != nil {
-			c.response.ServerError(w, err.Error())
-		} else {
-			c.response.Success(w)
+		pollConn := c.ms.GetPollConn()
+
+		if pollConn == nil {
+			c.response.ServerError(w, "connect to db isn't exist")
+			return
 		}
+
+		c.response.Success(w)
 	}
 }
 

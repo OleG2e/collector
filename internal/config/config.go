@@ -31,21 +31,14 @@ type (
 	ServerConfig struct {
 		LogLevel        string `env:"LOG_LEVEL"`
 		Address         string `env:"ADDRESS"`
-		StoreInterval   int    `env:"STORE_INTERVAL"`
 		FileStoragePath string `env:"FILE_STORAGE_PATH"`
-		Restore         bool   `env:"RESTORE"`
 		DSN             string `env:"DATABASE_DSN"`
+		StoreInterval   int    `env:"STORE_INTERVAL"`
+		Restore         bool   `env:"RESTORE"`
 	}
 )
 
 func NewAgentConfig(ctx context.Context, l *logging.ZapLogger) *AgentConfig {
-	var (
-		addr     string
-		logLevel string
-		ri       int
-		pi       int
-	)
-
 	c := AgentConfig{}
 
 	err := env.Parse(&c)
@@ -60,6 +53,11 @@ func NewAgentConfig(ctx context.Context, l *logging.ZapLogger) *AgentConfig {
 	if err != nil {
 		l.PanicCtx(ctx, "parse agent config env error", zap.Error(err))
 	}
+
+	var (
+		addr, logLevel string
+		ri, pi         int
+	)
 
 	flag.StringVar(&logLevel, "log_level", "info", "log level")
 	flag.StringVar(&addr, "a", "localhost:8080", "server address")
@@ -99,38 +97,35 @@ func NewAgentConfig(ctx context.Context, l *logging.ZapLogger) *AgentConfig {
 }
 
 func NewServerConfig(ctx context.Context, l *logging.ZapLogger) *ServerConfig {
-	var (
-		addr     string
-		logLevel string
-		fs       string
-		dsn      string
-		si       int
-		r        bool
-	)
-
 	c := ServerConfig{}
 
 	err := env.Parse(&c)
 
 	l.DebugCtx(ctx, "init server env config",
 		zap.String("ADDRESS", os.Getenv("ADDRESS")),
-		zap.String("LOG_LEVEL", logLevel),
+		zap.String("LOG_LEVEL", os.Getenv("LOG_LEVEL")),
 		zap.String("STORE_INTERVAL", os.Getenv("STORE_INTERVAL")),
 		zap.String("FILE_STORAGE_PATH", os.Getenv("FILE_STORAGE_PATH")),
 		zap.String("RESTORE", os.Getenv("RESTORE")),
-		zap.String("RESTORE", os.Getenv("DATABASE_DSN")),
+		zap.String("DATABASE_DSN", os.Getenv("DATABASE_DSN")),
 	)
 
 	if err != nil {
 		l.PanicCtx(ctx, "parse server config env error", zap.Error(err))
 	}
 
+	var (
+		addr, logLevel, fs, dsn string
+		si                      int
+		r                       bool
+	)
+
 	flag.StringVar(&addr, "a", "localhost:8080", "server host:port")
-	flag.StringVar(&logLevel, "log_level", "info", "log level")
+	flag.StringVar(&logLevel, "log_level", "debug", "log level")
 	flag.IntVar(&si, "i", defaultStoreIntervalSeconds, "store interval")
 	flag.StringVar(&fs, "f", "storage.db", "file storage path")
 	flag.BoolVar(&r, "r", true, "restore previous data")
-	flag.StringVar(&dsn, "d", "", "postgres dsn")
+	flag.StringVar(&dsn, "d", "", "postgres DSN")
 
 	flag.Parse()
 
