@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"sync"
 	"time"
@@ -70,18 +71,22 @@ func (ms *MemStorage) SetGaugeValue(metricName string, value float64) {
 
 func NewMemStorage(ctx context.Context, l *logging.ZapLogger, conf *config.ServerConfig) *MemStorage {
 	ms := &MemStorage{
-		Metrics: Metrics{
-			Counters: make(map[string]int64),
-			Gauges:   make(map[string]float64),
-		},
-		l:    l,
-		ctx:  ctx,
-		conf: conf,
-		mx:   &sync.RWMutex{},
+		Metrics: newMetrics(),
+		l:       l,
+		ctx:     ctx,
+		conf:    conf,
+		mx:      &sync.RWMutex{},
 	}
 	ms.openDBFile()
 
 	return ms
+}
+
+func newMetrics() Metrics {
+	return Metrics{
+		Counters: make(map[string]int64),
+		Gauges:   make(map[string]float64),
+	}
 }
 
 func (ms *MemStorage) InitFlushStorageTicker(storeInterval time.Duration) {
@@ -102,27 +107,13 @@ func (ms *MemStorage) RestoreStorage() {
 	reader := bufio.NewReader(ms.DBFile)
 	dec := json.NewDecoder(reader)
 
-	var states []Metrics
-	for dec.More() {
-		var decodedMetric Metrics
+	lastState := newMetrics()
 
-		err := dec.Decode(&decodedMetric)
-
-		if err != nil {
-			ms.l.FatalCtx(ms.ctx, "restore storage error", zap.Error(err))
-		}
-
-		states = append(states, decodedMetric)
+	if err := dec.Decode(&lastState); err != nil && err != io.EOF {
+		ms.l.FatalCtx(ms.ctx, "restore storage error", zap.Error(err))
 	}
 
-	if len(states) > 0 {
-		lastState := states[len(states)-1]
-
-		ms.Metrics = lastState
-
-		return
-	}
-	ms.l.InfoCtx(ms.ctx, "no restore metrics found")
+	ms.Metrics = lastState
 }
 
 func (ms *MemStorage) FlushStorage() error {
@@ -147,24 +138,15 @@ func (ms *MemStorage) FlushStorage() error {
 		}(ms.DBFile)
 	}
 
-	_, err = ms.DBFile.Write(data)
+	_, err = ms.DBFile.WriteAt(data, 0)
 
 	ms.l.InfoCtx(ms.ctx, "flush storage")
 
-	if err != nil {
-		return err
-	}
-
-	_, err = ms.DBFile.WriteString("\n")
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 func (ms *MemStorage) openDBFile() {
-	file, fileErr := os.OpenFile(ms.conf.FileStoragePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o666)
+	file, fileErr := os.OpenFile(ms.conf.FileStoragePath, os.O_RDWR|os.O_CREATE, 0o666)
 
 	if fileErr != nil {
 		ms.l.FatalCtx(ms.ctx, "open DB file error", zap.Error(fileErr))
