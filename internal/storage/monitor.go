@@ -204,21 +204,22 @@ func (s *MonitorStorage) sendGaugeData() error {
 	return nil
 }
 
-func (s *MonitorStorage) getPollCount() *int64 {
+func (s *MonitorStorage) getPollCount() int64 {
 	s.mx.RLock()
 	defer s.mx.RUnlock()
 
-	return &s.pollCount
+	return s.pollCount
 }
 
 func (s *MonitorStorage) sendCounterData() error {
 	address := s.agentConfig.GetAddress()
-	url := fmt.Sprintf("http://%s/update/", address)
+	url := "http://" + address + "/update/"
 
+	pollCount := s.getPollCount()
 	form := network.MetricForm{
 		ID:    "PollCount",
 		MType: "counter",
-		Delta: s.getPollCount(),
+		Delta: &pollCount,
 	}
 
 	formMarshalled, marshErr := json.Marshal(form)
