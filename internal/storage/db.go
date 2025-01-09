@@ -58,9 +58,14 @@ func (d *DBStorage) store(m *Metrics) error {
 		return err
 	}
 
+	_, truncErr := tx.Exec(d.ctx, "TRUNCATE TABLE counters; TRUNCATE TABLE gauges")
+	if truncErr != nil {
+		return truncErr
+	}
+
 	now := time.Now()
 	for k, v := range m.Gauges {
-		_, txErr := tx.Exec(d.ctx, "INSERT INTO gauges (name, value, created_at, updated_at) VALUES ($1, $2, $3, $4)", k, v, now, now)
+		_, txErr := tx.Exec(d.ctx, "INSERT INTO gauges (name, value, created_at) VALUES ($1, $2, $3)", k, v, now)
 		if txErr != nil {
 			d.l.WarnCtx(d.ctx, "transaction error", zap.Error(txErr))
 			return txErr
@@ -68,7 +73,7 @@ func (d *DBStorage) store(m *Metrics) error {
 	}
 
 	for k, v := range m.Counters {
-		_, txErr := tx.Exec(d.ctx, "INSERT INTO counters (name, value, created_at, updated_at) VALUES ($1, $2, $3, $4)", k, v, now, now)
+		_, txErr := tx.Exec(d.ctx, "INSERT INTO counters (name, value, created_at) VALUES ($1, $2, $3)", k, v, now)
 		if txErr != nil {
 			d.l.WarnCtx(d.ctx, "transaction error", zap.Error(txErr))
 			return txErr
@@ -84,7 +89,7 @@ func (d *DBStorage) restore() (*Metrics, error) {
 		Gauges:   make(map[string]float64),
 	}
 
-	queryG := "SELECT DISTINCT ON (name) name, value FROM (SELECT name, value FROM gauges ORDER BY created_at DESC)"
+	queryG := "SELECT name, value FROM gauges"
 	gauges, gQueryErr := d.poolConn.Query(d.ctx, queryG)
 	if gQueryErr != nil {
 		return nil, gQueryErr
@@ -107,7 +112,7 @@ func (d *DBStorage) restore() (*Metrics, error) {
 		return nil, gReadErr
 	}
 
-	queryC := "SELECT DISTINCT ON (name) name, value FROM (SELECT name, value FROM counters ORDER BY created_at DESC)"
+	queryC := "SELECT name, value FROM counters"
 	counters, cQueryErr := d.poolConn.Query(d.ctx, queryC)
 	if cQueryErr != nil {
 		return nil, cQueryErr

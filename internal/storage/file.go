@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"os"
 
@@ -32,42 +31,53 @@ func (f *FileStorage) GetStoreType() StoreType {
 }
 
 func (f *FileStorage) store(m *Metrics) error {
-	data, err := json.Marshal(m)
+	tmpFile, tmpFileErr := os.CreateTemp(".", "collector-*.bak")
+	if tmpFileErr != nil {
+		return tmpFileErr
+	}
+
+	defer func(tmpFile *os.File) {
+		fileCloseErr := tmpFile.Close()
+		if fileCloseErr != nil {
+			f.l.WarnCtx(f.ctx, "tmp file close error", zap.Error(fileCloseErr))
+		}
+	}(tmpFile)
+
+	data, err := json.Marshal(&m)
 
 	if err != nil {
 		return err
 	}
 
-	file, fileErr := os.OpenFile(f.conf.FileStoragePath, os.O_RDWR|os.O_CREATE, 0o666)
-	defer func(file *os.File) {
-		fileCloseErr := file.Close()
-		if fileCloseErr != nil && !errors.Is(fileCloseErr, os.ErrClosed) {
-			f.l.ErrorCtx(f.ctx, "file close error", zap.Error(fileCloseErr))
-		}
-	}(file)
+	_, err = tmpFile.Write(data)
 
-	if fileErr != nil {
-		return fileErr
+	if err != nil {
+		return err
 	}
 
-	f.l.DebugCtx(f.ctx, "flush storage", zap.String("path", f.conf.FileStoragePath))
+	err = os.Rename(tmpFile.Name(), f.conf.FileStoragePath)
 
-	_, err = file.WriteAt(data, 0)
+	f.l.InfoCtx(f.ctx, "flush storage")
 
 	return err
 }
 
 func (f *FileStorage) restore() (*Metrics, error) {
-	file, fileErr := os.OpenFile(f.conf.FileStoragePath, os.O_RDWR|os.O_CREATE, 0o666)
+	file, fileErr := os.Open(f.conf.FileStoragePath)
 
 	defer func(file *os.File) {
 		fileCloseErr := file.Close()
-		if fileCloseErr != nil && !errors.Is(fileCloseErr, os.ErrClosed) {
-			f.l.ErrorCtx(f.ctx, "file close error", zap.Error(fileCloseErr))
+		if fileCloseErr != nil {
+			f.l.WarnCtx(f.ctx, "file close error", zap.Error(fileCloseErr))
 		}
 	}(file)
 
+	if file == nil {
+		return nil, nil
+	}
+
 	if fileErr != nil {
+		f.l.WarnCtx(f.ctx, "open DB file error", zap.Error(fileErr))
 		return nil, fileErr
 	}
 
