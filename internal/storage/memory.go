@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"path"
 	"sync"
 	"time"
 
@@ -135,7 +136,8 @@ func (ms *MemStorage) FlushStorage() error {
 	ms.mx.Lock()
 	defer ms.mx.Unlock()
 
-	tmpFile, tmpFileErr := os.CreateTemp(".", "collector-*.bak")
+	dir := path.Dir(ms.conf.FileStoragePath)
+	tmpFile, tmpFileErr := os.CreateTemp(dir, "collector-*.bak")
 	if tmpFileErr != nil {
 		return tmpFileErr
 	}
