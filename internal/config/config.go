@@ -5,6 +5,7 @@ import (
 	"flag"
 	"log"
 	"os"
+	"strconv"
 	"time"
 
 	"go.uber.org/zap/zapcore"
@@ -151,10 +152,25 @@ func NewServerConfig(ctx context.Context, l *logging.ZapLogger) *ServerConfig {
 		c.DSN = dsn
 	}
 
-	if c.StoreInterval == 0 {
+	v, ok := os.LookupEnv("STORE_INTERVAL")
+	if ok {
+		vInt, vErr := strconv.Atoi(v)
+		if vErr != nil {
+			l.PanicCtx(ctx, "parse store interval env error", zap.Error(vErr))
+		}
+		c.StoreInterval = vInt
+	} else {
 		c.StoreInterval = si
 	}
-	if !c.Restore {
+
+	v, ok = os.LookupEnv("RESTORE")
+	if ok {
+		vBool, vBoolErr := strconv.ParseBool(v)
+		if vBoolErr != nil {
+			l.PanicCtx(ctx, "parse restore env error", zap.Error(vBoolErr))
+		}
+		c.Restore = vBool
+	} else {
 		c.Restore = r
 	}
 
