@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"os"
 	"sync"
@@ -81,7 +80,6 @@ func NewMemStorage(ctx context.Context, l *logging.ZapLogger, conf *config.Serve
 		PoolConn: poolConn,
 		mx:       &sync.RWMutex{},
 	}
-	ms.openDBFile()
 
 	return ms
 }
@@ -108,8 +106,25 @@ func (ms *MemStorage) RestoreStorage() {
 	ms.mx.Lock()
 	defer ms.mx.Unlock()
 
-	reader := bufio.NewReader(ms.DBFile)
-	dec := json.NewDecoder(reader)
+	file, fileErr := os.Open(ms.conf.FileStoragePath)
+
+	defer func(file *os.File) {
+		fileCloseErr := file.Close()
+		if fileCloseErr != nil {
+			ms.l.WarnCtx(ms.ctx, "file close error", zap.Error(fileCloseErr))
+		}
+	}(file)
+
+	if file == nil {
+		return
+	}
+
+	if fileErr != nil {
+		ms.l.WarnCtx(ms.ctx, "open DB file error", zap.Error(fileErr))
+		return
+	}
+
+	dec := json.NewDecoder(bufio.NewReader(file))
 
 	lastState := newMetrics()
 
@@ -124,37 +139,33 @@ func (ms *MemStorage) FlushStorage() error {
 	ms.mx.Lock()
 	defer ms.mx.Unlock()
 
+	tmpFile, tmpFileErr := os.CreateTemp(".", "collector-*.bak")
+	if tmpFileErr != nil {
+		return tmpFileErr
+	}
+
+	defer func(tmpFile *os.File) {
+		fileCloseErr := tmpFile.Close()
+		if fileCloseErr != nil {
+			ms.l.WarnCtx(ms.ctx, "tmp file close error", zap.Error(fileCloseErr))
+		}
+	}(tmpFile)
+
 	data, err := json.Marshal(&ms.Metrics)
 
 	if err != nil {
 		return err
 	}
 
-	if ms.DBFile == nil {
-		ms.openDBFile()
+	_, err = tmpFile.Write(data)
 
-		defer func(file *os.File) {
-			fileCloseErr := file.Close()
-			if fileCloseErr != nil && !errors.Is(fileCloseErr, os.ErrClosed) {
-				ms.l.ErrorCtx(ms.ctx, "file close error", zap.Error(fileCloseErr))
-			}
-			ms.DBFile = nil
-		}(ms.DBFile)
+	if err != nil {
+		return err
 	}
 
-	_, err = ms.DBFile.WriteAt(data, 0)
+	err = os.Rename(tmpFile.Name(), ms.conf.FileStoragePath)
 
 	ms.l.InfoCtx(ms.ctx, "flush storage")
 
 	return err
-}
-
-func (ms *MemStorage) openDBFile() {
-	file, fileErr := os.OpenFile(ms.conf.FileStoragePath, os.O_RDWR|os.O_CREATE, 0o666)
-
-	if fileErr != nil {
-		ms.l.FatalCtx(ms.ctx, "open DB file error", zap.Error(fileErr))
-	}
-
-	ms.DBFile = file
 }
