@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"github.com/OleG2e/collector/internal/storage"
 	"net/http"
 	"strconv"
 
@@ -49,10 +50,10 @@ func (c *Controller) UpdateMetric() http.HandlerFunc {
 
 func (c *Controller) PingDB() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		pollConn := c.ms.GetPollConn()
+		storeType := c.ms.GetStoreAlgo().GetStoreType()
 
-		if pollConn == nil {
-			c.response.ServerError(w, "connect to db isn't exist")
+		if storeType != storage.DbStoreType {
+			c.response.ServerError(w, "connect to db doesn't exist")
 			return
 		}
 

@@ -5,8 +5,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"github.com/OleG2e/collector/internal/config"
 	"github.com/OleG2e/collector/pkg/logging"
 	"go.uber.org/zap"
@@ -15,8 +13,8 @@ import (
 type StoreType string
 
 const (
-	fileStore = StoreType("file")
-	dbStore   = StoreType("db")
+	FileStoreType = StoreType("file")
+	DbStoreType   = StoreType("db")
 )
 
 type StoreAlgo interface {
@@ -32,7 +30,6 @@ type MemStorage struct {
 	l         *logging.ZapLogger
 	ctx       context.Context
 	mx        *sync.RWMutex
-	poolConn  *pgxpool.Pool
 	storeAlgo StoreAlgo
 }
 
@@ -126,6 +123,10 @@ func newMetrics() *Metrics {
 	}
 }
 
+func (ms *MemStorage) GetStoreAlgo() StoreAlgo {
+	return ms.storeAlgo
+}
+
 func (ms *MemStorage) InitFlushStorageTicker(storeInterval time.Duration) {
 	ticker := time.NewTicker(storeInterval)
 	go func() {
@@ -164,8 +165,4 @@ func (ms *MemStorage) FlushStorage() error {
 
 func (ms *MemStorage) CloseStorage() error {
 	return ms.storeAlgo.CloseStorage()
-}
-
-func (ms *MemStorage) GetPollConn() *pgxpool.Pool {
-	return ms.poolConn
 }

@@ -28,36 +28,50 @@ func NewFileStorage(ctx context.Context, l *logging.ZapLogger, conf *config.Serv
 }
 
 func (f *FileStorage) GetStoreType() StoreType {
-	return fileStore
+	return FileStoreType
 }
 
 func (f *FileStorage) store(m *Metrics) error {
-	dir := path.Dir(f.conf.FileStoragePath)
-	tmpFile, tmpFileErr := os.CreateTemp(dir, "collector-*.bak")
-	if tmpFileErr != nil {
-		return tmpFileErr
-	}
-
-	defer func(tmpFile *os.File) {
-		fileCloseErr := tmpFile.Close()
-		if fileCloseErr != nil {
-			f.l.WarnCtx(f.ctx, "tmp file close error", zap.Error(fileCloseErr))
+	var tmpFileName string
+	err := func() error {
+		dir := path.Dir(f.conf.FileStoragePath)
+		tmpFile, tmpFileErr := os.CreateTemp(dir, "collector-*.bak")
+		if tmpFileErr != nil {
+			return tmpFileErr
 		}
-	}(tmpFile)
 
-	data, err := json.Marshal(m)
+		tmpFileName = tmpFile.Name()
+
+		defer func(tmpFile *os.File) {
+			fileCloseErr := tmpFile.Close()
+			if fileCloseErr != nil {
+				f.l.WarnCtx(f.ctx, "tmp file close error", zap.Error(fileCloseErr))
+			}
+		}(tmpFile)
+
+		data, err := json.Marshal(m)
+		if err != nil {
+			return err
+		}
+
+		_, err = tmpFile.Write(data)
+
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}()
 
 	if err != nil {
+		removeErr := os.Remove(tmpFileName)
+		if removeErr != nil {
+			f.l.WarnCtx(f.ctx, "tmp file remove error", zap.Error(removeErr))
+		}
 		return err
 	}
 
-	_, err = tmpFile.Write(data)
-
-	if err != nil {
-		return err
-	}
-
-	err = os.Rename(tmpFile.Name(), f.conf.FileStoragePath)
+	err = os.Rename(tmpFileName, f.conf.FileStoragePath)
 
 	return err
 }
@@ -66,6 +80,11 @@ func (f *FileStorage) restore() (*Metrics, error) {
 	file, fileErr := os.Open(f.conf.FileStoragePath)
 
 	defer func(file *os.File) {
+		if file == nil {
+			f.l.WarnCtx(f.ctx, "restore file doesn't exist")
+			return
+		}
+
 		fileCloseErr := file.Close()
 		if fileCloseErr != nil {
 			f.l.WarnCtx(f.ctx, "file close error", zap.Error(fileCloseErr))
