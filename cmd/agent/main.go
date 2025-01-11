@@ -22,7 +22,11 @@ func main() {
 
 	defer l.Sync()
 
-	agentConfig := config.NewAgentConfig(ctx, l)
+	agentConfig, confErr := config.NewAgentConfig(ctx, l)
+	if confErr != nil {
+		l.PanicCtx(ctx, "parse agent config error", zap.Error(err))
+		return
+	}
 
 	l.SetLevel(agentConfig.GetLogLevel())
 

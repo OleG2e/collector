@@ -106,6 +106,11 @@ func (ms *MemStorage) RestoreStorage() {
 	file, fileErr := os.Open(ms.conf.FileStoragePath)
 
 	defer func(file *os.File) {
+		if file == nil {
+			ms.l.WarnCtx(ms.ctx, "restore file doesn't exist")
+			return
+		}
+
 		fileCloseErr := file.Close()
 		if fileCloseErr != nil {
 			ms.l.WarnCtx(ms.ctx, "file close error", zap.Error(fileCloseErr))
@@ -136,34 +141,46 @@ func (ms *MemStorage) FlushStorage() error {
 	ms.mx.Lock()
 	defer ms.mx.Unlock()
 
-	dir := path.Dir(ms.conf.FileStoragePath)
-	tmpFile, tmpFileErr := os.CreateTemp(dir, "collector-*.bak")
-	if tmpFileErr != nil {
-		return tmpFileErr
-	}
-
-	defer func(tmpFile *os.File) {
-		fileCloseErr := tmpFile.Close()
-		if fileCloseErr != nil {
-			ms.l.WarnCtx(ms.ctx, "tmp file close error", zap.Error(fileCloseErr))
+	var tmpFileName string
+	err := func() error {
+		dir := path.Dir(ms.conf.FileStoragePath)
+		tmpFile, tmpFileErr := os.CreateTemp(dir, "collector-*.bak")
+		if tmpFileErr != nil {
+			return tmpFileErr
 		}
-	}(tmpFile)
 
-	data, err := json.Marshal(&ms.Metrics)
+		tmpFileName = tmpFile.Name()
+
+		defer func(tmpFile *os.File) {
+			fileCloseErr := tmpFile.Close()
+			if fileCloseErr != nil {
+				ms.l.WarnCtx(ms.ctx, "tmp file close error", zap.Error(fileCloseErr))
+			}
+		}(tmpFile)
+
+		data, err := json.Marshal(&ms.Metrics)
+		if err != nil {
+			return err
+		}
+
+		_, err = tmpFile.Write(data)
+
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}()
 
 	if err != nil {
+		removeErr := os.Remove(tmpFileName)
+		if removeErr != nil {
+			ms.l.WarnCtx(ms.ctx, "tmp file remove error", zap.Error(removeErr))
+		}
 		return err
 	}
 
-	_, err = tmpFile.Write(data)
-
-	if err != nil {
-		return err
-	}
-
-	err = os.Rename(tmpFile.Name(), ms.conf.FileStoragePath)
-
-	ms.l.InfoCtx(ms.ctx, "flush storage")
+	err = os.Rename(tmpFileName, ms.conf.FileStoragePath)
 
 	return err
 }
