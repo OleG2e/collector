@@ -39,7 +39,7 @@ type (
 	}
 )
 
-func NewAgentConfig(ctx context.Context, l *logging.ZapLogger) *AgentConfig {
+func NewAgentConfig(ctx context.Context, l *logging.ZapLogger) (*AgentConfig, error) {
 	c := AgentConfig{}
 
 	err := env.Parse(&c)
@@ -52,7 +52,7 @@ func NewAgentConfig(ctx context.Context, l *logging.ZapLogger) *AgentConfig {
 	)
 
 	if err != nil {
-		l.PanicCtx(ctx, "parse agent config env error", zap.Error(err))
+		return nil, err
 	}
 
 	var (
@@ -94,10 +94,10 @@ func NewAgentConfig(ctx context.Context, l *logging.ZapLogger) *AgentConfig {
 		zap.String("LOG_LEVEL", c.LogLevel),
 	)
 
-	return &c
+	return &c, nil
 }
 
-func NewServerConfig(ctx context.Context, l *logging.ZapLogger) *ServerConfig {
+func NewServerConfig(ctx context.Context, l *logging.ZapLogger) (*ServerConfig, error) {
 	c := ServerConfig{}
 
 	err := env.Parse(&c)
@@ -112,7 +112,7 @@ func NewServerConfig(ctx context.Context, l *logging.ZapLogger) *ServerConfig {
 	)
 
 	if err != nil {
-		l.PanicCtx(ctx, "parse server config env error", zap.Error(err))
+		return nil, err
 	}
 
 	var (
@@ -156,7 +156,7 @@ func NewServerConfig(ctx context.Context, l *logging.ZapLogger) *ServerConfig {
 	if ok {
 		vInt, vErr := strconv.Atoi(v)
 		if vErr != nil {
-			l.PanicCtx(ctx, "parse store interval env error", zap.Error(vErr))
+			return nil, vErr
 		}
 		c.StoreInterval = vInt
 	} else {
@@ -167,7 +167,7 @@ func NewServerConfig(ctx context.Context, l *logging.ZapLogger) *ServerConfig {
 	if ok {
 		vBool, vBoolErr := strconv.ParseBool(v)
 		if vBoolErr != nil {
-			l.PanicCtx(ctx, "parse restore env error", zap.Error(vBoolErr))
+			return nil, vBoolErr
 		}
 		c.Restore = vBool
 	} else {
@@ -183,7 +183,7 @@ func NewServerConfig(ctx context.Context, l *logging.ZapLogger) *ServerConfig {
 		zap.String("DATABASE_DSN", c.DSN),
 	)
 
-	return &c
+	return &c, nil
 }
 
 func (c *AgentConfig) GetLogLevel() zapcore.Level {

@@ -23,7 +23,10 @@ func main() {
 
 	defer l.Sync()
 
-	conf := config.NewServerConfig(ctx, l)
+	conf, confErr := config.NewServerConfig(ctx, l)
+	if confErr != nil {
+		l.PanicCtx(ctx, "parse server config error", zap.Error(confErr))
+	}
 
 	l.SetLevel(conf.GetLogLevel())
 
