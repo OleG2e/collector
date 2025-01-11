@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"path"
 
 	"github.com/OleG2e/collector/internal/config"
 	"github.com/OleG2e/collector/pkg/logging"
@@ -18,12 +19,12 @@ type FileStorage struct {
 	conf *config.ServerConfig
 }
 
-func NewFileStorage(ctx context.Context, l *logging.ZapLogger, conf *config.ServerConfig) *FileStorage {
+func NewFileStorage(ctx context.Context, l *logging.ZapLogger, conf *config.ServerConfig) (*FileStorage, error) {
 	return &FileStorage{
 		ctx:  ctx,
 		l:    l,
 		conf: conf,
-	}
+	}, nil
 }
 
 func (f *FileStorage) GetStoreType() StoreType {
@@ -31,7 +32,8 @@ func (f *FileStorage) GetStoreType() StoreType {
 }
 
 func (f *FileStorage) store(m *Metrics) error {
-	tmpFile, tmpFileErr := os.CreateTemp(".", "collector-*.bak")
+	dir := path.Dir(f.conf.FileStoragePath)
+	tmpFile, tmpFileErr := os.CreateTemp(dir, "collector-*.bak")
 	if tmpFileErr != nil {
 		return tmpFileErr
 	}
@@ -43,7 +45,7 @@ func (f *FileStorage) store(m *Metrics) error {
 		}
 	}(tmpFile)
 
-	data, err := json.Marshal(&m)
+	data, err := json.Marshal(m)
 
 	if err != nil {
 		return err
@@ -56,8 +58,6 @@ func (f *FileStorage) store(m *Metrics) error {
 	}
 
 	err = os.Rename(tmpFile.Name(), f.conf.FileStoragePath)
-
-	f.l.InfoCtx(f.ctx, "flush storage")
 
 	return err
 }
@@ -89,4 +89,8 @@ func (f *FileStorage) restore() (*Metrics, error) {
 	}
 
 	return lastState, nil
+}
+
+func (f *FileStorage) CloseStorage() error {
+	return nil
 }

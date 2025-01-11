@@ -2,10 +2,6 @@ package storage
 
 import (
 	"context"
-	"encoding/json"
-	"io"
-	"os"
-	"path"
 	"sync"
 	"time"
 
@@ -16,16 +12,17 @@ import (
 	"go.uber.org/zap"
 )
 
-type StoreType int
+type StoreType string
 
 const (
-	fileStore StoreType = iota
-	dbStore
+	fileStore = StoreType("file")
+	dbStore   = StoreType("db")
 )
 
 type StoreAlgo interface {
 	store(m *Metrics) error
 	restore() (*Metrics, error)
+	CloseStorage() error
 	GetStoreType() StoreType
 }
 
@@ -92,11 +89,16 @@ func (ms *MemStorage) SetGaugeValue(metricName string, value float64) {
 	ms.Metrics.Gauges[metricName] = value
 }
 
-func GetStoreAlgo(ctx context.Context, l *logging.ZapLogger, conf *config.ServerConfig, poolConn *pgxpool.Pool) StoreAlgo {
-	if conf.GetDSN() != "" {
-		return NewDBStorage(ctx, l, poolConn)
+func GetStoreAlgo(ctx context.Context, l *logging.ZapLogger, conf *config.ServerConfig) StoreAlgo {
+	dbStorage, dbErr := NewDBStorage(ctx, l, conf)
+	if dbErr != nil {
+		fileStorage, fileErr := NewFileStorage(ctx, l, conf)
+		if fileErr != nil {
+			l.PanicCtx(ctx, "failed to create storage", zap.Error(fileErr))
+		}
+		return fileStorage
 	}
-	return NewFileStorage(ctx, l, conf)
+	return dbStorage
 }
 
 func NewMemStorage(
@@ -155,7 +157,13 @@ func (ms *MemStorage) FlushStorage() error {
 	ms.mx.Lock()
 	defer ms.mx.Unlock()
 
+	ms.l.InfoCtx(ms.ctx, "flush storage")
+
 	return ms.store()
+}
+
+func (ms *MemStorage) CloseStorage() error {
+	return ms.storeAlgo.CloseStorage()
 }
 
 func (ms *MemStorage) GetPollConn() *pgxpool.Pool {

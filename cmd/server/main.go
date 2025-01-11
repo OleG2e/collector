@@ -4,8 +4,6 @@ import (
 	"context"
 	"log"
 
-	"github.com/OleG2e/collector/pkg/db"
-
 	"github.com/OleG2e/collector/internal/config"
 	"github.com/OleG2e/collector/internal/controller"
 	"github.com/OleG2e/collector/internal/storage"
@@ -29,24 +27,18 @@ func main() {
 
 	l.SetLevel(conf.GetLogLevel())
 
-	poolConn, dbErr := db.NewPoolConn(ctx, conf)
-	if poolConn != nil {
-		defer poolConn.Close()
-	}
+	storeAlgo := storage.GetStoreAlgo(ctx, l, conf)
 
-	if dbErr != nil {
-		l.WarnCtx(ctx, "Unable to connect to database", zap.Error(dbErr))
-	}
-
-	storeAlgo := storage.GetStoreAlgo(ctx, l, conf, poolConn)
-
-	l.DebugCtx(ctx, "Using store algo", zap.Int("algo", int(storeAlgo.GetStoreType())))
+	l.DebugCtx(ctx, "Using store algo", zap.String("algo", string(storeAlgo.GetStoreType())))
 
 	store := storage.NewMemStorage(ctx, l, conf, storeAlgo)
 
 	defer func(storage *storage.MemStorage) {
 		if flushErr := storage.FlushStorage(); flushErr != nil {
 			l.ErrorCtx(ctx, "flush storage error", zap.Error(flushErr))
+		}
+		if err := store.CloseStorage(); err != nil {
+			l.PanicCtx(ctx, "failed to close storage", zap.Error(err))
 		}
 	}(store)
 

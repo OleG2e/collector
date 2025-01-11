@@ -2,6 +2,9 @@ package storage
 
 import (
 	"context"
+	"errors"
+	"github.com/OleG2e/collector/internal/config"
+	"github.com/OleG2e/collector/pkg/db"
 	"time"
 
 	"github.com/OleG2e/collector/pkg/logging"
@@ -28,14 +31,22 @@ type Gauge struct {
 func NewDBStorage(
 	ctx context.Context,
 	l *logging.ZapLogger,
-	poolConn *pgxpool.Pool,
-) *DBStorage {
+	conf *config.ServerConfig,
+) (*DBStorage, error) {
+	if conf.GetDSN() != "" {
+		return nil, errors.New("DSN is not provided")
+	}
+
+	poolConn, dbErr := db.NewPoolConn(ctx, conf)
+	if dbErr != nil {
+		return nil, dbErr
+	}
 
 	return &DBStorage{
 		ctx:      ctx,
 		l:        l,
 		poolConn: poolConn,
-	}
+	}, nil
 }
 
 func (d *DBStorage) GetStoreType() StoreType {
@@ -43,39 +54,40 @@ func (d *DBStorage) GetStoreType() StoreType {
 }
 
 func (d *DBStorage) store(m *Metrics) error {
-	tx, err := d.poolConn.Begin(d.ctx)
-
-	defer func() {
-		if commitErr := tx.Commit(d.ctx); commitErr != nil {
-			d.l.WarnCtx(d.ctx, "transaction commit error", zap.Error(commitErr))
-			if rErr := tx.Rollback(d.ctx); rErr != nil {
-				d.l.WarnCtx(d.ctx, "transaction rollback error", zap.Error(commitErr))
-			}
-		}
-	}()
+	ctx := context.Background()
+	tx, err := d.poolConn.Begin(ctx)
 
 	if err != nil {
 		return err
 	}
 
-	_, truncErr := tx.Exec(d.ctx, "TRUNCATE TABLE counters; TRUNCATE TABLE gauges")
+	defer func() {
+		if commitErr := tx.Commit(ctx); commitErr != nil {
+			d.l.WarnCtx(ctx, "transaction commit error", zap.Error(commitErr))
+			if rErr := tx.Rollback(ctx); rErr != nil {
+				d.l.WarnCtx(ctx, "transaction rollback error", zap.Error(commitErr))
+			}
+		}
+	}()
+
+	_, truncErr := tx.Exec(ctx, "TRUNCATE TABLE counters; TRUNCATE TABLE gauges")
 	if truncErr != nil {
 		return truncErr
 	}
 
 	now := time.Now()
 	for k, v := range m.Gauges {
-		_, txErr := tx.Exec(d.ctx, "INSERT INTO gauges (name, value, created_at) VALUES ($1, $2, $3)", k, v, now)
+		_, txErr := tx.Exec(ctx, "INSERT INTO gauges (name, value, created_at) VALUES ($1, $2, $3)", k, v, now)
 		if txErr != nil {
-			d.l.WarnCtx(d.ctx, "transaction error", zap.Error(txErr))
+			d.l.WarnCtx(ctx, "transaction error", zap.Error(txErr))
 			return txErr
 		}
 	}
 
 	for k, v := range m.Counters {
-		_, txErr := tx.Exec(d.ctx, "INSERT INTO counters (name, value, created_at) VALUES ($1, $2, $3)", k, v, now)
+		_, txErr := tx.Exec(ctx, "INSERT INTO counters (name, value, created_at) VALUES ($1, $2, $3)", k, v, now)
 		if txErr != nil {
-			d.l.WarnCtx(d.ctx, "transaction error", zap.Error(txErr))
+			d.l.WarnCtx(ctx, "transaction error", zap.Error(txErr))
 			return txErr
 		}
 	}
@@ -138,4 +150,11 @@ func (d *DBStorage) restore() (*Metrics, error) {
 	d.l.DebugCtx(d.ctx, "restored state", zap.Any("state", &m))
 
 	return &m, nil
+}
+
+func (d *DBStorage) CloseStorage() error {
+	if d.poolConn != nil {
+		d.poolConn.Close()
+	}
+	return nil
 }
