@@ -39,3 +39,20 @@ func NewFormByRequest(r *http.Request) (*MetricForm, error) {
 
 	return &form, decodeErr
 }
+
+func NewFormArrayByRequest(r *http.Request) ([]MetricForm, error) {
+	var bodyBuffer bytes.Buffer
+	r.Body = io.NopCloser(io.TeeReader(r.Body, &bodyBuffer))
+
+	var forms []MetricForm
+
+	decodeErr := json.NewDecoder(r.Body).Decode(&forms)
+
+	r.Body = io.NopCloser(&bodyBuffer)
+
+	if errors.Is(decodeErr, io.EOF) {
+		decodeErr = nil
+	}
+
+	return forms, decodeErr
+}

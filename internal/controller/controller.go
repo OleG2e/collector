@@ -37,6 +37,7 @@ func (c *Controller) Routes() *Controller {
 			w.WriteHeader(http.StatusOK)
 		})
 		r.Get("/ping", c.PingDB())
+		r.Post("/updates/", c.UpdateMetrics())
 	})
 
 	c.router.Route("/", func(r chi.Router) {

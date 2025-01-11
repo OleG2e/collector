@@ -48,6 +48,37 @@ func (c *Controller) UpdateMetric() http.HandlerFunc {
 	}
 }
 
+func (c *Controller) UpdateMetrics() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		forms, decodeErr := network.NewFormArrayByRequest(r)
+
+		if decodeErr != nil {
+			c.l.ErrorCtx(r.Context(), "decodeErr", zap.Error(decodeErr))
+			c.response.BadRequestError(w, decodeErr.Error())
+			return
+		}
+
+		if len(forms) == 0 {
+			c.response.BadRequestError(w, "no metrics found")
+			return
+		}
+
+		for _, form := range forms {
+			if form.IsGaugeType() {
+				c.ms.SetGaugeValue(form.ID, *form.Value)
+			}
+
+			if form.IsCounterType() {
+				c.ms.AddCounterValue(form.ID, *form.Delta)
+			}
+		}
+
+		c.syncStateLogger(r)
+
+		c.response.Success(w)
+	}
+}
+
 func (c *Controller) PingDB() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		storeType := c.ms.GetStoreAlgo().GetStoreType()

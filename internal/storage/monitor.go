@@ -259,3 +259,48 @@ func (s *MonitorStorage) sendCounterData() error {
 
 	return nil
 }
+
+func (s *MonitorStorage) sendData() error {
+	address := s.agentConfig.GetAddress()
+	url := "http://" + address + "/updates/"
+
+	data := s.getStats()
+	data["PollCount"] = s.getPollCount()
+
+	dataMarshalled, marshErr := json.Marshal(data)
+	if marshErr != nil {
+		return marshErr
+	}
+
+	req, reqErr := http.NewRequestWithContext(s.ctx, http.MethodPost, url, bytes.NewReader(dataMarshalled))
+
+	if reqErr != nil {
+		return reqErr
+	}
+
+	req.Header.Add("Content-Type", "application/json")
+
+	reqCloseErr := req.Body.Close()
+	if reqCloseErr != nil {
+		return reqCloseErr
+	}
+
+	resp, clientErr := s.httpClient.Do(req)
+
+	if clientErr != nil {
+		return clientErr
+	}
+
+	_, bodyErr := io.ReadAll(resp.Body)
+
+	if bodyErr != nil {
+		return bodyErr
+	}
+
+	respCloseErr := resp.Body.Close()
+	if respCloseErr != nil {
+		return respCloseErr
+	}
+
+	return nil
+}
