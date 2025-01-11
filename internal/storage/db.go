@@ -50,7 +50,7 @@ func NewDBStorage(
 }
 
 func (d *DBStorage) GetStoreType() StoreType {
-	return DbStoreType
+	return DBStoreType
 }
 
 func (d *DBStorage) store(m *Metrics) error {

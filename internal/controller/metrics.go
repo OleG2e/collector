@@ -52,7 +52,7 @@ func (c *Controller) PingDB() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		storeType := c.ms.GetStoreAlgo().GetStoreType()
 
-		if storeType != storage.DbStoreType {
+		if storeType != storage.DBStoreType {
 			c.response.ServerError(w, "connect to db doesn't exist")
 			return
 		}

@@ -14,7 +14,7 @@ type StoreType string
 
 const (
 	FileStoreType = StoreType("file")
-	DbStoreType   = StoreType("db")
+	DBStoreType   = StoreType("db")
 )
 
 type StoreAlgo interface {
