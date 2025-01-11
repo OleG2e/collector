@@ -1,60 +1,84 @@
 package storage
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"net/http"
 	"runtime"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/OleG2e/collector/internal/config"
+	"github.com/OleG2e/collector/pkg/logging"
+	"go.uber.org/zap"
+
+	"github.com/OleG2e/collector/internal/network"
 )
 
-var httpClient = http.DefaultClient
-var monitor *monitorStorage
-
-type monitorStorage struct {
+type MonitorStorage struct {
 	Stats        map[string]any
-	pollCount    int
+	pollCount    int64
 	RuntimeStats *runtime.MemStats
-	mx           sync.RWMutex
+	l            *logging.ZapLogger
+	agentConfig  *config.AgentConfig
+	mx           *sync.RWMutex
+	httpClient   *http.Client
+	ctx          context.Context
 }
 
-func (s *monitorStorage) refreshStats() {
+func NewMonitor(ctx context.Context, l *logging.ZapLogger, agentConfig *config.AgentConfig) *MonitorStorage {
+	g := make(map[string]any)
+	ms := &runtime.MemStats{}
+	mx := &sync.RWMutex{}
+	httpClient := http.DefaultClient
+
+	return &MonitorStorage{
+		Stats:        g,
+		RuntimeStats: ms,
+		mx:           mx,
+		l:            l,
+		ctx:          ctx,
+		httpClient:   httpClient,
+		agentConfig:  agentConfig,
+	}
+}
+
+func (s *MonitorStorage) refreshStats() {
 	s.incrementPollCount()
 	runtime.ReadMemStats(s.RuntimeStats)
 	s.seedGauge()
 }
 
-func (s *monitorStorage) resetPollCount() {
+func (s *MonitorStorage) resetPollCount() {
 	s.mx.Lock()
 	defer s.mx.Unlock()
 
 	s.pollCount = 0
 }
 
-func (s *monitorStorage) incrementPollCount() {
+func (s *MonitorStorage) incrementPollCount() {
 	s.mx.Lock()
 	defer s.mx.Unlock()
 
 	s.pollCount++
 }
 
-func (s *monitorStorage) initSendTicker() {
-	reportInterval := time.Duration(config.GetConfig().GetReportInterval()) * time.Second
-	ticker := time.NewTicker(reportInterval)
+func (s *MonitorStorage) initSendTicker() {
+	ticker := time.NewTicker(s.agentConfig.GetReportIntervalDuration())
 	go func() {
 		for range ticker.C {
 			sendGaugeDataErr := s.sendGaugeData()
 			if sendGaugeDataErr != nil {
-				log.Println(sendGaugeDataErr)
+				s.l.ErrorCtx(s.ctx, "send gauge error", zap.Error(sendGaugeDataErr))
 			}
 			sendCounterDataErr := s.sendCounterData()
 			if sendCounterDataErr != nil {
-				log.Println(sendCounterDataErr)
+				s.l.ErrorCtx(s.ctx, "send counter error", zap.Error(sendCounterDataErr))
 			}
 
 			if sendGaugeDataErr == nil && sendCounterDataErr == nil {
@@ -64,16 +88,16 @@ func (s *monitorStorage) initSendTicker() {
 	}()
 }
 
-func RunMonitor() {
-	initMonitor()
-	pollInterval := time.Duration(config.GetConfig().GetPollInterval()) * time.Second
+func RunMonitor(ctx context.Context, l *logging.ZapLogger, agentConfig *config.AgentConfig) {
+	mon := NewMonitor(ctx, l, agentConfig)
+	mon.initSendTicker()
 	for {
-		monitor.refreshStats()
-		time.Sleep(pollInterval)
+		mon.refreshStats()
+		time.Sleep(mon.agentConfig.GetPollIntervalDuration())
 	}
 }
 
-func (s *monitorStorage) seedGauge() {
+func (s *MonitorStorage) seedGauge() {
 	s.mx.Lock()
 	defer s.mx.Unlock()
 
@@ -107,7 +131,7 @@ func (s *monitorStorage) seedGauge() {
 	s.Stats["RandomValue"] = rand.Int63()
 }
 
-func (s *monitorStorage) getStats() map[string]any {
+func (s *MonitorStorage) getStats() map[string]any {
 	s.mx.RLock()
 	defer s.mx.RUnlock()
 
@@ -119,31 +143,47 @@ func (s *monitorStorage) getStats() map[string]any {
 	return mapCopy
 }
 
-func initMonitor() {
-	g := make(map[string]any)
-	ms := runtime.MemStats{}
+func (s *MonitorStorage) getStatForms() []network.MetricForm {
+	stats := s.getStats()
+	forms := make([]network.MetricForm, len(stats))
+	i := 0
+	for key, val := range stats {
+		valConverted, convertErr := strconv.ParseFloat(fmt.Sprintf("%v", val), 64)
+		if convertErr != nil {
+			s.l.ErrorCtx(s.ctx, "convert stat forms error", zap.Error(convertErr))
+		}
+		form := network.MetricForm{ID: key, MType: "gauge", Value: &valConverted}
+		forms[i] = form
+		i++
+	}
 
-	monitor = &monitorStorage{Stats: g, RuntimeStats: &ms}
-	monitor.initSendTicker()
+	return forms
 }
 
-func (s *monitorStorage) sendGaugeData() error {
-	hp := config.GetConfig().GetServerHostPort()
-	for k, v := range s.getStats() {
-		req, reqErr := http.NewRequest(http.MethodPost, fmt.Sprintf("http://%s/update/gauge/%s/%v", hp, k, v), http.NoBody)
+func (s *MonitorStorage) sendGaugeData() error {
+	address := s.agentConfig.GetAddress()
+	url := "http://" + address + "/update/"
+	for _, form := range s.getStatForms() {
+		formMarshalled, marshErr := json.Marshal(form)
+		if marshErr != nil {
+			return marshErr
+		}
+
+		reader := bytes.NewReader(formMarshalled)
+		req, reqErr := http.NewRequestWithContext(s.ctx, http.MethodPost, url, reader)
 
 		if reqErr != nil {
 			return reqErr
 		}
 
-		req.Header.Add("Content-Type", "text/plain")
+		req.Header.Add("Content-Type", "application/json")
 
 		reqCloseErr := req.Body.Close()
 		if reqCloseErr != nil {
 			return reqCloseErr
 		}
 
-		resp, clientErr := httpClient.Do(req)
+		resp, clientErr := s.httpClient.Do(req)
 
 		if clientErr != nil {
 			return clientErr
@@ -164,30 +204,43 @@ func (s *monitorStorage) sendGaugeData() error {
 	return nil
 }
 
-func (s *monitorStorage) getPollCount() int {
+func (s *MonitorStorage) getPollCount() int64 {
 	s.mx.RLock()
 	defer s.mx.RUnlock()
 
 	return s.pollCount
 }
 
-func (s *monitorStorage) sendCounterData() error {
-	hp := config.GetConfig().GetServerHostPort()
-	url := fmt.Sprintf("http://%s/update/counter/PollCount/%d", hp, s.getPollCount())
-	req, reqErr := http.NewRequest(http.MethodPost, url, http.NoBody)
+func (s *MonitorStorage) sendCounterData() error {
+	address := s.agentConfig.GetAddress()
+	url := "http://" + address + "/update/"
+
+	pollCount := s.getPollCount()
+	form := network.MetricForm{
+		ID:    "PollCount",
+		MType: "counter",
+		Delta: &pollCount,
+	}
+
+	formMarshalled, marshErr := json.Marshal(form)
+	if marshErr != nil {
+		return marshErr
+	}
+
+	req, reqErr := http.NewRequestWithContext(s.ctx, http.MethodPost, url, bytes.NewReader(formMarshalled))
 
 	if reqErr != nil {
 		return reqErr
 	}
 
-	req.Header.Add("Content-Type", "text/plain")
+	req.Header.Add("Content-Type", "application/json")
 
 	reqCloseErr := req.Body.Close()
 	if reqCloseErr != nil {
 		return reqCloseErr
 	}
 
-	resp, clientErr := httpClient.Do(req)
+	resp, clientErr := s.httpClient.Do(req)
 
 	if clientErr != nil {
 		return clientErr
