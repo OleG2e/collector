@@ -1,37 +1,56 @@
 package main
 
 import (
-	"net/http"
+	"context"
+	"log"
 
 	"github.com/OleG2e/collector/internal/config"
 	"github.com/OleG2e/collector/internal/controller"
-	metricmiddleware "github.com/OleG2e/collector/internal/middleware"
-	"github.com/OleG2e/collector/internal/response"
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	"github.com/OleG2e/collector/internal/storage"
+	"github.com/OleG2e/collector/pkg/logging"
+	"go.uber.org/zap"
 )
 
 func main() {
-	r := chi.NewRouter()
-	r.Use(middleware.Logger)
-	r.Use(metricmiddleware.AllowedMetricsOnly)
+	l, zapErr := logging.NewZapLogger(zap.DebugLevel)
 
-	r.Get("/value/counter/{metric}", controller.GetCounter())
-	r.Get("/value/gauge/{metric}", controller.GetGauge())
+	if zapErr != nil {
+		log.Panic(zapErr)
+	}
 
-	r.Post("/update/counter/{metric}/{value}", controller.UpdateCounter())
-	r.Post("/update/gauge/{metric}/{value}", controller.UpdateGauge())
-	r.Post("/update/counter/", r.NotFoundHandler())
-	r.Post("/update/gauge/", r.NotFoundHandler())
+	ctx := context.Background()
+	ctx = l.WithContextFields(ctx, zap.String("app", "server"))
 
-	r.Post("/", func(w http.ResponseWriter, req *http.Request) {
-		response.BadRequestError(w, http.StatusText(http.StatusBadRequest))
-	})
+	defer l.Sync()
 
-	hp := config.GetConfig().GetServerHostPort()
-	err := http.ListenAndServe(hp, r)
+	conf, confErr := config.NewServerConfig(ctx, l)
+	if confErr != nil {
+		l.PanicCtx(ctx, "parse server config error", zap.Error(confErr))
+	}
 
-	if err != nil {
-		panic(err)
+	l.SetLevel(conf.GetLogLevel())
+
+	store := storage.NewMemStorage(ctx, l, conf)
+
+	defer func(storage *storage.MemStorage) {
+		if flushErr := storage.FlushStorage(); flushErr != nil {
+			l.ErrorCtx(ctx, "flush storage error", zap.Error(flushErr))
+		}
+	}(store)
+
+	storeInterval := conf.GetStoreIntervalDuration()
+
+	if storeInterval > 0 {
+		store.InitFlushStorageTicker(storeInterval)
+	}
+
+	if conf.Restore {
+		store.RestoreStorage()
+	}
+
+	metricsController := controller.New(l, ctx, store, conf)
+
+	if err := metricsController.Routes().ServeHTTP(conf); err != nil {
+		l.PanicCtx(ctx, "failed to start server", zap.Error(err))
 	}
 }
