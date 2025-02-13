@@ -1,12 +1,7 @@
 package storage
 
 import (
-	"bufio"
 	"context"
-	"encoding/json"
-	"io"
-	"os"
-	"path"
 	"sync"
 	"time"
 
@@ -15,18 +10,40 @@ import (
 	"go.uber.org/zap"
 )
 
+type StoreType string
+
+const (
+	FileStoreType = StoreType("file")
+	DBStoreType   = StoreType("db")
+)
+
+type StoreAlgo interface {
+	store(m *Metrics) error
+	restore() (*Metrics, error)
+	CloseStorage() error
+	GetStoreType() StoreType
+}
+
 type MemStorage struct {
-	Metrics Metrics
-	DBFile  *os.File
-	conf    *config.ServerConfig
-	l       *logging.ZapLogger
-	ctx     context.Context
-	mx      *sync.RWMutex
+	Metrics   *Metrics
+	conf      *config.ServerConfig
+	l         *logging.ZapLogger
+	ctx       context.Context
+	mx        *sync.RWMutex
+	storeAlgo StoreAlgo
 }
 
 type Metrics struct {
 	Counters map[string]int64   `json:"counters"`
 	Gauges   map[string]float64 `json:"gauges"`
+}
+
+func (ms *MemStorage) store() error {
+	return ms.storeAlgo.store(ms.Metrics)
+}
+
+func (ms *MemStorage) setStoreAlgo(sa StoreAlgo) {
+	ms.storeAlgo = sa
 }
 
 func (ms *MemStorage) AddCounterValue(metricName string, value int64) {
@@ -69,23 +86,45 @@ func (ms *MemStorage) SetGaugeValue(metricName string, value float64) {
 	ms.Metrics.Gauges[metricName] = value
 }
 
-func NewMemStorage(ctx context.Context, l *logging.ZapLogger, conf *config.ServerConfig) *MemStorage {
+func GetStoreAlgo(ctx context.Context, l *logging.ZapLogger, conf *config.ServerConfig) StoreAlgo {
+	dbStorage, dbErr := NewDBStorage(ctx, l, conf)
+	if dbErr != nil {
+		fileStorage, fileErr := NewFileStorage(ctx, l, conf)
+		if fileErr != nil {
+			l.PanicCtx(ctx, "failed to create storage", zap.Error(fileErr))
+		}
+		return fileStorage
+	}
+	return dbStorage
+}
+
+func NewMemStorage(
+	ctx context.Context,
+	l *logging.ZapLogger,
+	conf *config.ServerConfig,
+	storeAlgo StoreAlgo,
+) *MemStorage {
 	ms := &MemStorage{
-		Metrics: newMetrics(),
-		l:       l,
-		ctx:     ctx,
-		conf:    conf,
-		mx:      &sync.RWMutex{},
+		Metrics:   newMetrics(),
+		l:         l,
+		ctx:       ctx,
+		conf:      conf,
+		storeAlgo: storeAlgo,
+		mx:        &sync.RWMutex{},
 	}
 
 	return ms
 }
 
-func newMetrics() Metrics {
-	return Metrics{
+func newMetrics() *Metrics {
+	return &Metrics{
 		Counters: make(map[string]int64),
 		Gauges:   make(map[string]float64),
 	}
+}
+
+func (ms *MemStorage) GetStoreAlgo() StoreAlgo {
+	return ms.storeAlgo
 }
 
 func (ms *MemStorage) InitFlushStorageTicker(storeInterval time.Duration) {
@@ -99,88 +138,31 @@ func (ms *MemStorage) InitFlushStorageTicker(storeInterval time.Duration) {
 	}()
 }
 
-func (ms *MemStorage) RestoreStorage() {
+func (ms *MemStorage) RestoreStorage() error {
 	ms.mx.Lock()
 	defer ms.mx.Unlock()
 
-	file, fileErr := os.Open(ms.conf.FileStoragePath)
-
-	defer func(file *os.File) {
-		if file == nil {
-			ms.l.WarnCtx(ms.ctx, "restore file doesn't exist")
-			return
-		}
-
-		fileCloseErr := file.Close()
-		if fileCloseErr != nil {
-			ms.l.WarnCtx(ms.ctx, "file close error", zap.Error(fileCloseErr))
-		}
-	}(file)
-
-	if file == nil {
-		return
+	metrics, err := ms.storeAlgo.restore()
+	if err != nil {
+		return err
 	}
 
-	if fileErr != nil {
-		ms.l.WarnCtx(ms.ctx, "open DB file error", zap.Error(fileErr))
-		return
+	if metrics != nil {
+		ms.Metrics = metrics
 	}
 
-	dec := json.NewDecoder(bufio.NewReader(file))
-
-	lastState := newMetrics()
-
-	if err := dec.Decode(&lastState); err != nil && err != io.EOF {
-		ms.l.FatalCtx(ms.ctx, "restore storage error", zap.Error(err))
-	}
-
-	ms.Metrics = lastState
+	return nil
 }
 
 func (ms *MemStorage) FlushStorage() error {
 	ms.mx.Lock()
 	defer ms.mx.Unlock()
 
-	var tmpFileName string
-	err := func() error {
-		dir := path.Dir(ms.conf.FileStoragePath)
-		tmpFile, tmpFileErr := os.CreateTemp(dir, "collector-*.bak")
-		if tmpFileErr != nil {
-			return tmpFileErr
-		}
+	ms.l.InfoCtx(ms.ctx, "flush storage")
 
-		tmpFileName = tmpFile.Name()
+	return ms.store()
+}
 
-		defer func(tmpFile *os.File) {
-			fileCloseErr := tmpFile.Close()
-			if fileCloseErr != nil {
-				ms.l.WarnCtx(ms.ctx, "tmp file close error", zap.Error(fileCloseErr))
-			}
-		}(tmpFile)
-
-		data, err := json.Marshal(&ms.Metrics)
-		if err != nil {
-			return err
-		}
-
-		_, err = tmpFile.Write(data)
-
-		if err != nil {
-			return err
-		}
-
-		return nil
-	}()
-
-	if err != nil {
-		removeErr := os.Remove(tmpFileName)
-		if removeErr != nil {
-			ms.l.WarnCtx(ms.ctx, "tmp file remove error", zap.Error(removeErr))
-		}
-		return err
-	}
-
-	err = os.Rename(tmpFileName, ms.conf.FileStoragePath)
-
-	return err
+func (ms *MemStorage) CloseStorage() error {
+	return ms.storeAlgo.CloseStorage()
 }

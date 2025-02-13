@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"github.com/OleG2e/collector/internal/storage"
 	"net/http"
 	"strconv"
 
@@ -44,6 +45,19 @@ func (c *Controller) UpdateMetric() http.HandlerFunc {
 		}
 
 		c.response.BadRequestError(w, "unknown metric type")
+	}
+}
+
+func (c *Controller) PingDB() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		storeType := c.ms.GetStoreAlgo().GetStoreType()
+
+		if storeType != storage.DBStoreType {
+			c.response.ServerError(w, "connect to db doesn't exist")
+			return
+		}
+
+		c.response.Success(w)
 	}
 }
 

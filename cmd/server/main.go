@@ -30,11 +30,18 @@ func main() {
 
 	l.SetLevel(conf.GetLogLevel())
 
-	store := storage.NewMemStorage(ctx, l, conf)
+	storeAlgo := storage.GetStoreAlgo(ctx, l, conf)
+
+	l.DebugCtx(ctx, "Using store algo", zap.String("algo", string(storeAlgo.GetStoreType())))
+
+	store := storage.NewMemStorage(ctx, l, conf, storeAlgo)
 
 	defer func(storage *storage.MemStorage) {
 		if flushErr := storage.FlushStorage(); flushErr != nil {
 			l.ErrorCtx(ctx, "flush storage error", zap.Error(flushErr))
+		}
+		if err := store.CloseStorage(); err != nil {
+			l.PanicCtx(ctx, "failed to close storage", zap.Error(err))
 		}
 	}(store)
 
@@ -45,7 +52,10 @@ func main() {
 	}
 
 	if conf.Restore {
-		store.RestoreStorage()
+		restoreErr := store.RestoreStorage()
+		if restoreErr != nil {
+			l.ErrorCtx(ctx, "restore storage error", zap.Error(restoreErr))
+		}
 	}
 
 	metricsController := controller.New(l, ctx, store, conf)
