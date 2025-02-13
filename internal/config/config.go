@@ -35,6 +35,7 @@ type (
 		StoreInterval   int    `env:"STORE_INTERVAL"`
 		FileStoragePath string `env:"FILE_STORAGE_PATH"`
 		Restore         bool   `env:"RESTORE"`
+		DSN             string `env:"DATABASE_DSN"`
 	}
 )
 
@@ -103,6 +104,7 @@ func NewServerConfig(ctx context.Context, l *logging.ZapLogger) (*ServerConfig, 
 		addr     string
 		logLevel string
 		fs       string
+		dsn      string
 		si       int
 		r        bool
 	)
@@ -117,6 +119,7 @@ func NewServerConfig(ctx context.Context, l *logging.ZapLogger) (*ServerConfig, 
 		zap.String("STORE_INTERVAL", os.Getenv("STORE_INTERVAL")),
 		zap.String("FILE_STORAGE_PATH", os.Getenv("FILE_STORAGE_PATH")),
 		zap.String("RESTORE", os.Getenv("RESTORE")),
+		zap.String("RESTORE", os.Getenv("DATABASE_DSN")),
 	)
 
 	if err != nil {
@@ -128,6 +131,7 @@ func NewServerConfig(ctx context.Context, l *logging.ZapLogger) (*ServerConfig, 
 	flag.IntVar(&si, "i", defaultStoreIntervalSeconds, "store interval")
 	flag.StringVar(&fs, "f", "storage.db", "file storage path")
 	flag.BoolVar(&r, "r", true, "restore previous data")
+	flag.StringVar(&dsn, "d", "", "postgres dsn")
 
 	flag.Parse()
 
@@ -135,6 +139,7 @@ func NewServerConfig(ctx context.Context, l *logging.ZapLogger) (*ServerConfig, 
 		zap.String("ADDRESS", addr),
 		zap.String("FILE_STORAGE_PATH", fs),
 		zap.String("LOG_LEVEL", logLevel),
+		zap.String("DATABASE_DSN", dsn),
 		zap.Int("STORE_INTERVAL", si),
 		zap.Bool("RESTORE", r),
 	)
@@ -147,6 +152,9 @@ func NewServerConfig(ctx context.Context, l *logging.ZapLogger) (*ServerConfig, 
 	}
 	if c.FileStoragePath == "" {
 		c.FileStoragePath = fs
+	}
+	if c.DSN == "" {
+		c.DSN = dsn
 	}
 
 	v, ok := os.LookupEnv("STORE_INTERVAL")
@@ -177,6 +185,7 @@ func NewServerConfig(ctx context.Context, l *logging.ZapLogger) (*ServerConfig, 
 		zap.Int("STORE_INTERVAL", c.StoreInterval),
 		zap.Bool("RESTORE", c.Restore),
 		zap.String("LOG_LEVEL", c.LogLevel),
+		zap.String("DATABASE_DSN", c.DSN),
 	)
 
 	return &c, nil
@@ -222,4 +231,8 @@ func (c *ServerConfig) GetStoreIntervalDuration() time.Duration {
 
 func (c *ServerConfig) GetStoreInterval() int {
 	return c.StoreInterval
+}
+
+func (c *ServerConfig) GetDSN() string {
+	return c.DSN
 }
