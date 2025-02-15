@@ -23,7 +23,7 @@ type Controller struct {
 }
 
 func New(logger *logging.ZapLogger, ctx context.Context, ms *storage.MemStorage, conf *config.ServerConfig) *Controller {
-	return &Controller{l: logger, ms: ms, conf: conf, router: chi.NewRouter(), response: response.New(logger, ctx)}
+	return &Controller{l: logger, ms: ms, conf: conf, router: chi.NewRouter(), response: response.New(ctx, logger)}
 }
 
 func (c *Controller) Routes() *Controller {

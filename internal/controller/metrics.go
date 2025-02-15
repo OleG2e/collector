@@ -1,9 +1,10 @@
 package controller
 
 import (
-	"github.com/OleG2e/collector/internal/storage"
 	"net/http"
 	"strconv"
+
+	"github.com/OleG2e/collector/internal/storage"
 
 	"go.uber.org/zap"
 

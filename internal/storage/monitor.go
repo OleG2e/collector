@@ -28,10 +28,9 @@ type MonitorStorage struct {
 	agentConfig  *config.AgentConfig
 	mx           *sync.RWMutex
 	httpClient   *http.Client
-	ctx          context.Context
 }
 
-func NewMonitor(ctx context.Context, l *logging.ZapLogger, agentConfig *config.AgentConfig) *MonitorStorage {
+func NewMonitor(l *logging.ZapLogger, agentConfig *config.AgentConfig) *MonitorStorage {
 	g := make(map[string]any)
 	ms := &runtime.MemStats{}
 	mx := &sync.RWMutex{}
@@ -42,7 +41,6 @@ func NewMonitor(ctx context.Context, l *logging.ZapLogger, agentConfig *config.A
 		RuntimeStats: ms,
 		mx:           mx,
 		l:            l,
-		ctx:          ctx,
 		httpClient:   httpClient,
 		agentConfig:  agentConfig,
 	}
@@ -68,17 +66,18 @@ func (s *MonitorStorage) incrementPollCount() {
 	s.pollCount++
 }
 
-func (s *MonitorStorage) initSendTicker() {
+func (s *MonitorStorage) initSendTicker(ctx context.Context) {
 	ticker := time.NewTicker(s.agentConfig.GetReportIntervalDuration())
 	go func() {
-		for range ticker.C {
-			sendGaugeDataErr := s.sendGaugeData()
+		select {
+		case <-ticker.C:
+			sendGaugeDataErr := s.sendGaugeData(ctx)
 			if sendGaugeDataErr != nil {
-				s.l.ErrorCtx(s.ctx, "send gauge error", zap.Error(sendGaugeDataErr))
+				s.l.ErrorCtx(ctx, "send gauge error", zap.Error(sendGaugeDataErr))
 			}
-			sendCounterDataErr := s.sendCounterData()
+			sendCounterDataErr := s.sendCounterData(ctx)
 			if sendCounterDataErr != nil {
-				s.l.ErrorCtx(s.ctx, "send counter error", zap.Error(sendCounterDataErr))
+				s.l.ErrorCtx(ctx, "send counter error", zap.Error(sendCounterDataErr))
 			}
 
 			if sendGaugeDataErr == nil && sendCounterDataErr == nil {
@@ -89,8 +88,8 @@ func (s *MonitorStorage) initSendTicker() {
 }
 
 func RunMonitor(ctx context.Context, l *logging.ZapLogger, agentConfig *config.AgentConfig) {
-	mon := NewMonitor(ctx, l, agentConfig)
-	mon.initSendTicker()
+	mon := NewMonitor(l, agentConfig)
+	mon.initSendTicker(ctx)
 	for {
 		mon.refreshStats()
 		time.Sleep(mon.agentConfig.GetPollIntervalDuration())
@@ -143,34 +142,38 @@ func (s *MonitorStorage) getStats() map[string]any {
 	return mapCopy
 }
 
-func (s *MonitorStorage) getStatForms() []network.MetricForm {
+func (s *MonitorStorage) getStatForms() ([]network.MetricForm, error) {
 	stats := s.getStats()
 	forms := make([]network.MetricForm, len(stats))
 	i := 0
 	for key, val := range stats {
 		valConverted, convertErr := strconv.ParseFloat(fmt.Sprintf("%v", val), 64)
 		if convertErr != nil {
-			s.l.ErrorCtx(s.ctx, "convert stat forms error", zap.Error(convertErr))
+			return nil, convertErr
 		}
 		form := network.MetricForm{ID: key, MType: "gauge", Value: &valConverted}
 		forms[i] = form
 		i++
 	}
 
-	return forms
+	return forms, nil
 }
 
-func (s *MonitorStorage) sendGaugeData() error {
+func (s *MonitorStorage) sendGaugeData(ctx context.Context) error {
 	address := s.agentConfig.GetAddress()
 	url := "http://" + address + "/update/"
-	for _, form := range s.getStatForms() {
+	sf, err := s.getStatForms()
+	if err != nil {
+		return err
+	}
+	for _, form := range sf {
 		formMarshalled, marshErr := json.Marshal(form)
 		if marshErr != nil {
 			return marshErr
 		}
 
 		reader := bytes.NewReader(formMarshalled)
-		req, reqErr := http.NewRequestWithContext(s.ctx, http.MethodPost, url, reader)
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, url, reader)
 
 		if reqErr != nil {
 			return reqErr
@@ -211,7 +214,7 @@ func (s *MonitorStorage) getPollCount() int64 {
 	return s.pollCount
 }
 
-func (s *MonitorStorage) sendCounterData() error {
+func (s *MonitorStorage) sendCounterData(ctx context.Context) error {
 	address := s.agentConfig.GetAddress()
 	url := "http://" + address + "/update/"
 
@@ -227,7 +230,7 @@ func (s *MonitorStorage) sendCounterData() error {
 		return marshErr
 	}
 
-	req, reqErr := http.NewRequestWithContext(s.ctx, http.MethodPost, url, bytes.NewReader(formMarshalled))
+	req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(formMarshalled))
 
 	if reqErr != nil {
 		return reqErr
@@ -260,7 +263,7 @@ func (s *MonitorStorage) sendCounterData() error {
 	return nil
 }
 
-func (s *MonitorStorage) sendData() error {
+func (s *MonitorStorage) sendData(ctx context.Context) error {
 	address := s.agentConfig.GetAddress()
 	url := "http://" + address + "/updates/"
 
@@ -272,7 +275,7 @@ func (s *MonitorStorage) sendData() error {
 		return marshErr
 	}
 
-	req, reqErr := http.NewRequestWithContext(s.ctx, http.MethodPost, url, bytes.NewReader(dataMarshalled))
+	req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(dataMarshalled))
 
 	if reqErr != nil {
 		return reqErr

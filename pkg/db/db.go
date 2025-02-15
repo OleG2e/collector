@@ -2,10 +2,16 @@ package db
 
 import (
 	"context"
-	"os"
+	"embed"
+	"errors"
+	"fmt"
 
 	"github.com/OleG2e/collector/internal/config"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 )
 
 func NewPoolConn(ctx context.Context, c *config.ServerConfig) (*pgxpool.Pool, error) {
@@ -21,19 +27,30 @@ func NewPoolConn(ctx context.Context, c *config.ServerConfig) (*pgxpool.Pool, er
 		return nil, err
 	}
 
-	err = initDB(ctx, pool)
+	if err := runMigrations(c.GetDSN()); err != nil {
+		return nil, fmt.Errorf("failed to run DB migrations: %w", err)
+	}
 
 	return pool, err
 }
 
-func initDB(ctx context.Context, pollConn *pgxpool.Pool) error {
-	sqlCommands, err := os.ReadFile("../../init.sql")
+//go:embed migrations/*.sql
+var migrationsDir embed.FS
 
+func runMigrations(dsn string) error {
+	d, err := iofs.New(migrationsDir, "migrations")
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to return an iofs driver: %w", err)
 	}
 
-	_, err = pollConn.Exec(ctx, string(sqlCommands))
-
-	return err
+	m, err := migrate.NewWithSourceInstance("iofs", d, dsn)
+	if err != nil {
+		return fmt.Errorf("failed to get a new migrate instance: %w", err)
+	}
+	if err := m.Up(); err != nil {
+		if !errors.Is(err, migrate.ErrNoChange) {
+			return fmt.Errorf("failed to apply migrations to the DB: %w", err)
+		}
+	}
+	return nil
 }

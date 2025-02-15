@@ -22,7 +22,7 @@ func AllowedMetricsOnly(l *logging.ZapLogger) func(next http.Handler) http.Handl
 			form, decodeErr := network.NewFormByRequest(r)
 			hasAllowedMetric := form.IsGaugeType() || form.IsCounterType()
 			if decodeErr != nil || !hasAllowedMetric {
-				response.New(l, r.Context()).BadRequestError(w, http.StatusText(http.StatusBadRequest))
+				response.New(r.Context(), l).BadRequestError(w, http.StatusText(http.StatusBadRequest))
 				return
 			}
 			next.ServeHTTP(w, r)

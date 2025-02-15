@@ -89,6 +89,7 @@ func (ms *MemStorage) SetGaugeValue(metricName string, value float64) {
 func GetStoreAlgo(ctx context.Context, l *logging.ZapLogger, conf *config.ServerConfig) StoreAlgo {
 	dbStorage, dbErr := NewDBStorage(ctx, l, conf)
 	if dbErr != nil {
+		l.WarnCtx(ctx, "GetStoreAlgo: failed to connect to database", zap.Error(dbErr))
 		fileStorage, fileErr := NewFileStorage(ctx, l, conf)
 		if fileErr != nil {
 			l.PanicCtx(ctx, "failed to create storage", zap.Error(fileErr))

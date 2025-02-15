@@ -14,7 +14,7 @@ type Response struct {
 	ctx context.Context
 }
 
-func New(l *logging.ZapLogger, ctx context.Context) *Response {
+func New(ctx context.Context, l *logging.ZapLogger) *Response {
 	return &Response{
 		l:   l,
 		ctx: ctx,

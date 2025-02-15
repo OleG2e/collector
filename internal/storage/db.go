@@ -3,10 +3,10 @@ package storage
 import (
 	"context"
 	"errors"
-	"github.com/OleG2e/collector/internal/config"
-	"github.com/OleG2e/collector/pkg/db"
 	"time"
 
+	"github.com/OleG2e/collector/internal/config"
+	"github.com/OleG2e/collector/pkg/db"
 	"github.com/OleG2e/collector/pkg/logging"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
@@ -33,7 +33,7 @@ func NewDBStorage(
 	l *logging.ZapLogger,
 	conf *config.ServerConfig,
 ) (*DBStorage, error) {
-	if conf.GetDSN() != "" {
+	if conf.GetDSN() == "" {
 		return nil, errors.New("DSN is not provided")
 	}
 

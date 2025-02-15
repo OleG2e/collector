@@ -12,6 +12,19 @@ tasks:
   build_server:
     cmds:
       - cd cmd/server && go build -race -buildvcs=false -o server
+  pretty:
+    cmds:
+      - goimports -w .
+  migrate:
+    cmds:
+      - docker run --rm
+        -v $(realpath ./db/migrations):/migrations
+        migrate/migrate:latest
+        create
+        -dir /migrations
+        -ext .sql
+        -seq -digits 5
+        init
   build_agent:
     cmds:
       - cd cmd/agent && go build -race -buildvcs=false -o agent
@@ -24,7 +37,7 @@ tasks:
     deps:
       - build_server
     cmds:
-      - cd cmd/server && ./server
+      - cd cmd/server && ./server -i 0 -d "postgres://root:root@localhost:5432/collector?sslmode=disable"
   tests:
     cmds:
       - task: test1
