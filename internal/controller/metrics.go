@@ -26,7 +26,7 @@ func (c *Controller) UpdateMetric() http.HandlerFunc {
 
 			c.syncStateLogger(r)
 
-			c.response.Send(w, http.StatusOK, form)
+			c.response.Send(r.Context(), w, http.StatusOK, form)
 			return
 		}
 
@@ -41,7 +41,7 @@ func (c *Controller) UpdateMetric() http.HandlerFunc {
 
 			c.syncStateLogger(r)
 
-			c.response.Send(w, http.StatusOK, form)
+			c.response.Send(r.Context(), w, http.StatusOK, form)
 			return
 		}
 
@@ -106,14 +106,14 @@ func (c *Controller) GetMetric() http.HandlerFunc {
 		if form.IsGaugeType() {
 			value, _ := c.ms.GetGaugeValue(form.ID)
 			form.Value = &value
-			c.response.Send(w, http.StatusOK, form)
+			c.response.Send(r.Context(), w, http.StatusOK, form)
 			return
 		}
 
 		if form.IsCounterType() {
 			value, _ := c.ms.GetCounterValue(form.ID)
 			form.Delta = &value
-			c.response.Send(w, http.StatusOK, form)
+			c.response.Send(r.Context(), w, http.StatusOK, form)
 			return
 		}
 		c.response.BadRequestError(w, "unknown metric type")
@@ -158,39 +158,39 @@ func (c *Controller) UpdateGauge() http.HandlerFunc {
 }
 
 func (c *Controller) GetCounter() http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		metric := req.PathValue(metricReqPathName)
+	return func(w http.ResponseWriter, r *http.Request) {
+		metric := r.PathValue(metricReqPathName)
 
 		val, hasVal := c.ms.GetCounterValue(metric)
 
 		if !hasVal {
-			http.NotFound(w, req)
+			http.NotFound(w, r)
 			return
 		}
 
-		c.response.Send(w, http.StatusOK, val)
+		c.response.Send(r.Context(), w, http.StatusOK, val)
 	}
 }
 
 func (c *Controller) GetGauge() http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		metric := req.PathValue(metricReqPathName)
+	return func(w http.ResponseWriter, r *http.Request) {
+		metric := r.PathValue(metricReqPathName)
 
 		val, hasVal := c.ms.GetGaugeValue(metric)
 
 		if !hasVal {
-			http.NotFound(w, req)
+			http.NotFound(w, r)
 			return
 		}
 
-		c.response.Send(w, http.StatusOK, val)
+		c.response.Send(r.Context(), w, http.StatusOK, val)
 	}
 }
 
 func (c *Controller) syncStateLogger(r *http.Request) {
 	storeInterval := c.conf.GetStoreInterval()
 	if storeInterval == 0 {
-		err := c.ms.FlushStorage()
+		err := c.ms.FlushStorage(r.Context())
 		if err != nil {
 			c.l.ErrorCtx(r.Context(), "sync state error", zap.Error(err))
 		}

@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/OleG2e/collector/pkg/retry"
+
 	"github.com/OleG2e/collector/internal/config"
 	"github.com/OleG2e/collector/pkg/logging"
 	"go.uber.org/zap"
@@ -18,8 +20,8 @@ const (
 )
 
 type StoreAlgo interface {
-	store(m *Metrics) error
-	restore() (*Metrics, error)
+	store(ctx context.Context, m *Metrics) error
+	restore(ctx context.Context) (*Metrics, error)
 	CloseStorage() error
 	GetStoreType() StoreType
 }
@@ -28,7 +30,6 @@ type MemStorage struct {
 	Metrics   *Metrics
 	conf      *config.ServerConfig
 	l         *logging.ZapLogger
-	ctx       context.Context
 	mx        *sync.RWMutex
 	storeAlgo StoreAlgo
 }
@@ -38,8 +39,10 @@ type Metrics struct {
 	Gauges   map[string]float64 `json:"gauges"`
 }
 
-func (ms *MemStorage) store() error {
-	return ms.storeAlgo.store(ms.Metrics)
+func (ms *MemStorage) store(ctx context.Context) error {
+	return retry.Try(func() error {
+		return ms.storeAlgo.store(ctx, ms.Metrics)
+	})
 }
 
 func (ms *MemStorage) setStoreAlgo(sa StoreAlgo) {
@@ -90,7 +93,7 @@ func GetStoreAlgo(ctx context.Context, l *logging.ZapLogger, conf *config.Server
 	dbStorage, dbErr := NewDBStorage(ctx, l, conf)
 	if dbErr != nil {
 		l.WarnCtx(ctx, "GetStoreAlgo: failed to connect to database", zap.Error(dbErr))
-		fileStorage, fileErr := NewFileStorage(ctx, l, conf)
+		fileStorage, fileErr := NewFileStorage(l, conf)
 		if fileErr != nil {
 			l.PanicCtx(ctx, "failed to create storage", zap.Error(fileErr))
 		}
@@ -100,7 +103,6 @@ func GetStoreAlgo(ctx context.Context, l *logging.ZapLogger, conf *config.Server
 }
 
 func NewMemStorage(
-	ctx context.Context,
 	l *logging.ZapLogger,
 	conf *config.ServerConfig,
 	storeAlgo StoreAlgo,
@@ -108,7 +110,6 @@ func NewMemStorage(
 	ms := &MemStorage{
 		Metrics:   newMetrics(),
 		l:         l,
-		ctx:       ctx,
 		conf:      conf,
 		storeAlgo: storeAlgo,
 		mx:        &sync.RWMutex{},
@@ -128,24 +129,30 @@ func (ms *MemStorage) GetStoreAlgo() StoreAlgo {
 	return ms.storeAlgo
 }
 
-func (ms *MemStorage) InitFlushStorageTicker(storeInterval time.Duration) {
+func (ms *MemStorage) InitFlushStorageTicker(ctx context.Context, storeInterval time.Duration) {
 	ticker := time.NewTicker(storeInterval)
 	go func() {
 		for range ticker.C {
-			if err := ms.FlushStorage(); err != nil {
-				ms.l.ErrorCtx(ms.ctx, "flush storage error", zap.Error(err))
+			if err := ms.FlushStorage(ctx); err != nil {
+				ms.l.ErrorCtx(ctx, "flush storage error", zap.Error(err))
 			}
 		}
 	}()
 }
 
-func (ms *MemStorage) RestoreStorage() error {
+func (ms *MemStorage) RestoreStorage(ctx context.Context) error {
 	ms.mx.Lock()
 	defer ms.mx.Unlock()
 
-	metrics, err := ms.storeAlgo.restore()
-	if err != nil {
+	var metrics *Metrics
+	var err error
+	tryErr := retry.Try(func() error {
+		metrics, err = ms.storeAlgo.restore(ctx)
 		return err
+	})
+
+	if tryErr != nil {
+		return tryErr
 	}
 
 	if metrics != nil {
@@ -155,15 +162,17 @@ func (ms *MemStorage) RestoreStorage() error {
 	return nil
 }
 
-func (ms *MemStorage) FlushStorage() error {
+func (ms *MemStorage) FlushStorage(ctx context.Context) error {
 	ms.mx.Lock()
 	defer ms.mx.Unlock()
 
-	ms.l.InfoCtx(ms.ctx, "flush storage")
-
-	return ms.store()
+	return retry.Try(func() error {
+		return ms.store(ctx)
+	})
 }
 
 func (ms *MemStorage) CloseStorage() error {
-	return ms.storeAlgo.CloseStorage()
+	return retry.Try(func() error {
+		return ms.storeAlgo.CloseStorage()
+	})
 }

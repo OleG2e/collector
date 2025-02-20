@@ -34,10 +34,10 @@ func main() {
 
 	l.DebugCtx(ctx, "Using store algo", zap.String("algo", string(storeAlgo.GetStoreType())))
 
-	store := storage.NewMemStorage(ctx, l, conf, storeAlgo)
+	store := storage.NewMemStorage(l, conf, storeAlgo)
 
 	defer func(storage *storage.MemStorage) {
-		if flushErr := storage.FlushStorage(); flushErr != nil {
+		if flushErr := storage.FlushStorage(ctx); flushErr != nil {
 			l.ErrorCtx(ctx, "flush storage error", zap.Error(flushErr))
 		}
 		if err := store.CloseStorage(); err != nil {
@@ -48,17 +48,17 @@ func main() {
 	storeInterval := conf.GetStoreIntervalDuration()
 
 	if storeInterval > 0 {
-		store.InitFlushStorageTicker(storeInterval)
+		store.InitFlushStorageTicker(ctx, storeInterval)
 	}
 
 	if conf.Restore {
-		restoreErr := store.RestoreStorage()
+		restoreErr := store.RestoreStorage(ctx)
 		if restoreErr != nil {
 			l.ErrorCtx(ctx, "restore storage error", zap.Error(restoreErr))
 		}
 	}
 
-	metricsController := controller.New(l, ctx, store, conf)
+	metricsController := controller.New(l, store, conf)
 
 	if err := metricsController.Routes().ServeHTTP(conf); err != nil {
 		l.PanicCtx(ctx, "failed to start server", zap.Error(err))

@@ -33,7 +33,6 @@ func TestController_GetCounter(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &Controller{
 				l:        tt.fields.l,
-				ctx:      tt.fields.ctx,
 				router:   tt.fields.router,
 				response: tt.fields.response,
 				ms:       tt.fields.ms,
@@ -66,7 +65,6 @@ func TestController_GetGauge(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &Controller{
 				l:        tt.fields.l,
-				ctx:      tt.fields.ctx,
 				router:   tt.fields.router,
 				response: tt.fields.response,
 				ms:       tt.fields.ms,
@@ -99,7 +97,6 @@ func TestController_GetMetric(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &Controller{
 				l:        tt.fields.l,
-				ctx:      tt.fields.ctx,
 				router:   tt.fields.router,
 				response: tt.fields.response,
 				ms:       tt.fields.ms,
@@ -132,7 +129,6 @@ func TestController_UpdateCounter(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &Controller{
 				l:        tt.fields.l,
-				ctx:      tt.fields.ctx,
 				router:   tt.fields.router,
 				response: tt.fields.response,
 				ms:       tt.fields.ms,
@@ -165,7 +161,6 @@ func TestController_UpdateGauge(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &Controller{
 				l:        tt.fields.l,
-				ctx:      tt.fields.ctx,
 				router:   tt.fields.router,
 				response: tt.fields.response,
 				ms:       tt.fields.ms,
@@ -198,7 +193,6 @@ func TestController_UpdateMetric(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &Controller{
 				l:        tt.fields.l,
-				ctx:      tt.fields.ctx,
 				router:   tt.fields.router,
 				response: tt.fields.response,
 				ms:       tt.fields.ms,
@@ -234,7 +228,6 @@ func TestController_syncStateLogger(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &Controller{
 				l:        tt.fields.l,
-				ctx:      tt.fields.ctx,
 				router:   tt.fields.router,
 				response: tt.fields.response,
 				ms:       tt.fields.ms,

@@ -13,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/OleG2e/collector/pkg/retry"
+
 	"github.com/OleG2e/collector/internal/config"
 	"github.com/OleG2e/collector/pkg/logging"
 	"go.uber.org/zap"
@@ -186,21 +188,28 @@ func (s *MonitorStorage) sendGaugeData(ctx context.Context) error {
 			return reqCloseErr
 		}
 
-		resp, clientErr := s.httpClient.Do(req)
+		tryErr := retry.Try(func() error {
+			resp, clientErr := s.httpClient.Do(req)
 
-		if clientErr != nil {
-			return clientErr
-		}
+			if clientErr != nil {
+				return clientErr
+			}
 
-		_, bodyErr := io.ReadAll(resp.Body)
+			_, bodyErr := io.ReadAll(resp.Body)
 
-		if bodyErr != nil {
-			return bodyErr
-		}
+			if bodyErr != nil {
+				return bodyErr
+			}
 
-		respCloseErr := resp.Body.Close()
-		if respCloseErr != nil {
-			return respCloseErr
+			respCloseErr := resp.Body.Close()
+			if respCloseErr != nil {
+				return respCloseErr
+			}
+			return nil
+		})
+
+		if tryErr != nil {
+			return tryErr
 		}
 	}
 
@@ -243,24 +252,28 @@ func (s *MonitorStorage) sendCounterData(ctx context.Context) error {
 		return reqCloseErr
 	}
 
-	resp, clientErr := s.httpClient.Do(req)
+	tryErr := retry.Try(func() error {
+		resp, clientErr := s.httpClient.Do(req)
 
-	if clientErr != nil {
-		return clientErr
-	}
+		if clientErr != nil {
+			return clientErr
+		}
 
-	_, bodyErr := io.ReadAll(resp.Body)
+		_, bodyErr := io.ReadAll(resp.Body)
 
-	if bodyErr != nil {
-		return bodyErr
-	}
+		if bodyErr != nil {
+			return bodyErr
+		}
 
-	respCloseErr := resp.Body.Close()
-	if respCloseErr != nil {
-		return respCloseErr
-	}
+		respCloseErr := resp.Body.Close()
+		if respCloseErr != nil {
+			return respCloseErr
+		}
 
-	return nil
+		return nil
+	})
+
+	return tryErr
 }
 
 func (s *MonitorStorage) sendData(ctx context.Context) error {
@@ -288,22 +301,26 @@ func (s *MonitorStorage) sendData(ctx context.Context) error {
 		return reqCloseErr
 	}
 
-	resp, clientErr := s.httpClient.Do(req)
+	tryErr := retry.Try(func() error {
+		resp, clientErr := s.httpClient.Do(req)
 
-	if clientErr != nil {
-		return clientErr
-	}
+		if clientErr != nil {
+			return clientErr
+		}
 
-	_, bodyErr := io.ReadAll(resp.Body)
+		_, bodyErr := io.ReadAll(resp.Body)
 
-	if bodyErr != nil {
-		return bodyErr
-	}
+		if bodyErr != nil {
+			return bodyErr
+		}
 
-	respCloseErr := resp.Body.Close()
-	if respCloseErr != nil {
-		return respCloseErr
-	}
+		respCloseErr := resp.Body.Close()
+		if respCloseErr != nil {
+			return respCloseErr
+		}
 
-	return nil
+		return nil
+	})
+
+	return tryErr
 }

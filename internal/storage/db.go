@@ -13,7 +13,6 @@ import (
 )
 
 type DBStorage struct {
-	ctx      context.Context
 	l        *logging.ZapLogger
 	poolConn *pgxpool.Pool
 }
@@ -43,7 +42,6 @@ func NewDBStorage(
 	}
 
 	return &DBStorage{
-		ctx:      ctx,
 		l:        l,
 		poolConn: poolConn,
 	}, nil
@@ -53,8 +51,7 @@ func (d *DBStorage) GetStoreType() StoreType {
 	return DBStoreType
 }
 
-func (d *DBStorage) store(m *Metrics) error {
-	ctx := context.Background()
+func (d *DBStorage) store(ctx context.Context, m *Metrics) error {
 	tx, err := d.poolConn.Begin(ctx)
 
 	if err != nil {
@@ -95,14 +92,14 @@ func (d *DBStorage) store(m *Metrics) error {
 	return nil
 }
 
-func (d *DBStorage) restore() (*Metrics, error) {
+func (d *DBStorage) restore(ctx context.Context) (*Metrics, error) {
 	m := Metrics{
 		Counters: make(map[string]int64),
 		Gauges:   make(map[string]float64),
 	}
 
 	queryG := "SELECT name, value FROM gauges"
-	gauges, gQueryErr := d.poolConn.Query(d.ctx, queryG)
+	gauges, gQueryErr := d.poolConn.Query(ctx, queryG)
 	if gQueryErr != nil {
 		return nil, gQueryErr
 	}
@@ -113,19 +110,19 @@ func (d *DBStorage) restore() (*Metrics, error) {
 		var g Gauge
 		gTxErr := gauges.Scan(&g.Name, &g.Value)
 		if gTxErr != nil {
-			d.l.WarnCtx(d.ctx, "scan gauge error", zap.Error(gTxErr))
+			d.l.WarnCtx(ctx, "scan gauge error", zap.Error(gTxErr))
 			return nil, gTxErr
 		}
 		m.Gauges[g.Name] = g.Value
 	}
 
 	if gReadErr := gauges.Err(); gReadErr != nil {
-		d.l.WarnCtx(d.ctx, "scan gauges error", zap.Error(gReadErr))
+		d.l.WarnCtx(ctx, "scan gauges error", zap.Error(gReadErr))
 		return nil, gReadErr
 	}
 
 	queryC := "SELECT name, value FROM counters"
-	counters, cQueryErr := d.poolConn.Query(d.ctx, queryC)
+	counters, cQueryErr := d.poolConn.Query(ctx, queryC)
 	if cQueryErr != nil {
 		return nil, cQueryErr
 	}
@@ -136,18 +133,18 @@ func (d *DBStorage) restore() (*Metrics, error) {
 		var c Counter
 		cTxErr := counters.Scan(&c.Name, &c.Value)
 		if cTxErr != nil {
-			d.l.WarnCtx(d.ctx, "scan counter error", zap.Error(cTxErr))
+			d.l.WarnCtx(ctx, "scan counter error", zap.Error(cTxErr))
 			return nil, cTxErr
 		}
 		m.Counters[c.Name] = c.Value
 	}
 
 	if cReadErr := counters.Err(); cReadErr != nil {
-		d.l.WarnCtx(d.ctx, "scan counters error", zap.Error(cReadErr))
+		d.l.WarnCtx(ctx, "scan counters error", zap.Error(cReadErr))
 		return nil, cReadErr
 	}
 
-	d.l.DebugCtx(d.ctx, "restored state", zap.Any("state", &m))
+	d.l.DebugCtx(ctx, "restored state", zap.Any("state", &m))
 
 	return &m, nil
 }

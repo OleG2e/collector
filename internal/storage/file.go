@@ -14,14 +14,12 @@ import (
 )
 
 type FileStorage struct {
-	ctx  context.Context
 	l    *logging.ZapLogger
 	conf *config.ServerConfig
 }
 
-func NewFileStorage(ctx context.Context, l *logging.ZapLogger, conf *config.ServerConfig) (*FileStorage, error) {
+func NewFileStorage(l *logging.ZapLogger, conf *config.ServerConfig) (*FileStorage, error) {
 	return &FileStorage{
-		ctx:  ctx,
 		l:    l,
 		conf: conf,
 	}, nil
@@ -31,7 +29,7 @@ func (f *FileStorage) GetStoreType() StoreType {
 	return FileStoreType
 }
 
-func (f *FileStorage) store(m *Metrics) error {
+func (f *FileStorage) store(ctx context.Context, m *Metrics) error {
 	var tmpFileName string
 	err := func() error {
 		dir := path.Dir(f.conf.FileStoragePath)
@@ -45,7 +43,7 @@ func (f *FileStorage) store(m *Metrics) error {
 		defer func(tmpFile *os.File) {
 			fileCloseErr := tmpFile.Close()
 			if fileCloseErr != nil {
-				f.l.WarnCtx(f.ctx, "tmp file close error", zap.Error(fileCloseErr))
+				f.l.WarnCtx(ctx, "tmp file close error", zap.Error(fileCloseErr))
 			}
 		}(tmpFile)
 
@@ -66,7 +64,7 @@ func (f *FileStorage) store(m *Metrics) error {
 	if err != nil {
 		removeErr := os.Remove(tmpFileName)
 		if removeErr != nil {
-			f.l.WarnCtx(f.ctx, "tmp file remove error", zap.Error(removeErr))
+			f.l.WarnCtx(ctx, "tmp file remove error", zap.Error(removeErr))
 		}
 		return err
 	}
@@ -76,18 +74,18 @@ func (f *FileStorage) store(m *Metrics) error {
 	return err
 }
 
-func (f *FileStorage) restore() (*Metrics, error) {
+func (f *FileStorage) restore(ctx context.Context) (*Metrics, error) {
 	file, fileErr := os.Open(f.conf.FileStoragePath)
 
 	defer func(file *os.File) {
 		if file == nil {
-			f.l.WarnCtx(f.ctx, "restore file doesn't exist")
+			f.l.WarnCtx(ctx, "restore file doesn't exist")
 			return
 		}
 
 		fileCloseErr := file.Close()
 		if fileCloseErr != nil {
-			f.l.WarnCtx(f.ctx, "file close error", zap.Error(fileCloseErr))
+			f.l.WarnCtx(ctx, "file close error", zap.Error(fileCloseErr))
 		}
 	}(file)
 
@@ -96,7 +94,7 @@ func (f *FileStorage) restore() (*Metrics, error) {
 	}
 
 	if fileErr != nil {
-		f.l.WarnCtx(f.ctx, "open DB file error", zap.Error(fileErr))
+		f.l.WarnCtx(ctx, "open DB file error", zap.Error(fileErr))
 		return nil, fileErr
 	}
 
@@ -104,7 +102,8 @@ func (f *FileStorage) restore() (*Metrics, error) {
 
 	lastState := newMetrics()
 	if err := dec.Decode(&lastState); err != nil && err != io.EOF {
-		f.l.FatalCtx(f.ctx, "restore storage error", zap.Error(err))
+		f.l.FatalCtx(ctx, "restore storage error", zap.Error(err))
+		return nil, nil
 	}
 
 	return lastState, nil

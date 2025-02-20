@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/OleG2e/collector/internal/config"
@@ -15,15 +14,14 @@ import (
 
 type Controller struct {
 	l        *logging.ZapLogger
-	ctx      context.Context
 	router   chi.Router
 	response *response.Response
 	ms       *storage.MemStorage
 	conf     *config.ServerConfig
 }
 
-func New(logger *logging.ZapLogger, ctx context.Context, ms *storage.MemStorage, conf *config.ServerConfig) *Controller {
-	return &Controller{l: logger, ms: ms, conf: conf, router: chi.NewRouter(), response: response.New(ctx, logger)}
+func New(logger *logging.ZapLogger, ms *storage.MemStorage, conf *config.ServerConfig) *Controller {
+	return &Controller{l: logger, ms: ms, conf: conf, router: chi.NewRouter(), response: response.New(logger)}
 }
 
 func (c *Controller) Routes() *Controller {
