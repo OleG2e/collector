@@ -71,8 +71,7 @@ func (s *MonitorStorage) incrementPollCount() {
 func (s *MonitorStorage) initSendTicker(ctx context.Context) {
 	ticker := time.NewTicker(s.agentConfig.GetReportIntervalDuration())
 	go func() {
-		select {
-		case <-ticker.C:
+		for range ticker.C {
 			sendGaugeDataErr := s.sendGaugeData(ctx)
 			if sendGaugeDataErr != nil {
 				s.l.ErrorCtx(ctx, "send gauge error", zap.Error(sendGaugeDataErr))
