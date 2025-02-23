@@ -148,7 +148,7 @@ func (s *MonitorStorage) getStatForms() ([]network.MetricForm, error) {
 		if convertErr != nil {
 			return nil, convertErr
 		}
-		form := network.MetricForm{ID: key, MType: "gauge", Value: &valConverted}
+		form := network.MetricForm{ID: key, MType: network.MetricTypeGauge, Value: &valConverted}
 		forms[i] = form
 		i++
 	}
@@ -158,7 +158,7 @@ func (s *MonitorStorage) getStatForms() ([]network.MetricForm, error) {
 
 func (s *MonitorStorage) getPollCountForm() network.MetricForm {
 	delta := s.getPollCount()
-	return network.MetricForm{ID: "PollCount", MType: "counter", Delta: &delta}
+	return network.MetricForm{ID: "PollCount", MType: network.MetricTypeCounter, Delta: &delta}
 }
 
 func (s *MonitorStorage) getPollCount() int64 {

@@ -33,7 +33,7 @@ func AllowedMetricsOnly(l *logging.ZapLogger) func(next http.Handler) http.Handl
 }
 
 func hasAllowedMetricByURLPath(path string) bool {
-	allowedMetricTypes := []string{"gauge", "counter"}
+	allowedMetricTypes := []string{string(network.MetricTypeGauge), string(network.MetricTypeCounter)}
 
 	return slices.ContainsFunc(allowedMetricTypes, func(m string) bool {
 		return strings.Contains(path, m)
