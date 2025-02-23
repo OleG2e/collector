@@ -81,7 +81,7 @@ func (c *Controller) UpdateMetrics() http.HandlerFunc {
 }
 
 func (c *Controller) PingDB() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, _ *http.Request) {
 		storeType := c.st.GetStoreAlgo().GetStoreType()
 
 		if storeType != storage.DBStoreType {
