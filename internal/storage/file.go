@@ -29,7 +29,7 @@ func (f *FileStorage) GetStoreType() StoreType {
 	return FileStoreType
 }
 
-func (f *FileStorage) store(ctx context.Context, m *Metrics) error {
+func (f *FileStorage) Store(ctx context.Context, m *Metrics) error {
 	var tmpFileName string
 	err := func() error {
 		dir := path.Dir(f.conf.FileStoragePath)
@@ -74,7 +74,7 @@ func (f *FileStorage) store(ctx context.Context, m *Metrics) error {
 	return err
 }
 
-func (f *FileStorage) restore(ctx context.Context) (*Metrics, error) {
+func (f *FileStorage) Restore(ctx context.Context) (*Metrics, error) {
 	file, fileErr := os.Open(f.conf.FileStoragePath)
 
 	defer func(file *os.File) {

@@ -16,12 +16,12 @@ type Controller struct {
 	l        *logging.ZapLogger
 	router   chi.Router
 	response *response.Response
-	ms       *storage.MemStorage
+	st       *storage.Storage
 	conf     *config.ServerConfig
 }
 
-func New(logger *logging.ZapLogger, ms *storage.MemStorage, conf *config.ServerConfig) *Controller {
-	return &Controller{l: logger, ms: ms, conf: conf, router: chi.NewRouter(), response: response.New(logger)}
+func New(logger *logging.ZapLogger, st *storage.Storage, conf *config.ServerConfig) *Controller {
+	return &Controller{l: logger, st: st, conf: conf, router: chi.NewRouter(), response: response.New(logger)}
 }
 
 func (c *Controller) Routes() *Controller {

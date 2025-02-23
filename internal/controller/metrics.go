@@ -22,7 +22,7 @@ func (c *Controller) UpdateMetric() http.HandlerFunc {
 		}
 
 		if form.IsGaugeType() {
-			c.ms.SetGaugeValue(form.ID, *form.Value)
+			c.st.SetGaugeValue(form.ID, *form.Value)
 
 			c.syncStateLogger(r)
 
@@ -31,8 +31,8 @@ func (c *Controller) UpdateMetric() http.HandlerFunc {
 		}
 
 		if form.IsCounterType() {
-			c.ms.AddCounterValue(form.ID, *form.Delta)
-			val, hasVal := c.ms.GetCounterValue(form.ID)
+			c.st.AddCounterValue(form.ID, *form.Delta)
+			val, hasVal := c.st.GetCounterValue(form.ID)
 			if !hasVal {
 				http.NotFound(w, r)
 				return
@@ -66,11 +66,11 @@ func (c *Controller) UpdateMetrics() http.HandlerFunc {
 
 		for _, form := range forms {
 			if form.IsGaugeType() {
-				c.ms.SetGaugeValue(form.ID, *form.Value)
+				c.st.SetGaugeValue(form.ID, *form.Value)
 			}
 
 			if form.IsCounterType() {
-				c.ms.AddCounterValue(form.ID, *form.Delta)
+				c.st.AddCounterValue(form.ID, *form.Delta)
 			}
 		}
 
@@ -82,7 +82,7 @@ func (c *Controller) UpdateMetrics() http.HandlerFunc {
 
 func (c *Controller) PingDB() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		storeType := c.ms.GetStoreAlgo().GetStoreType()
+		storeType := c.st.GetStoreAlgo().GetStoreType()
 
 		if storeType != storage.DBStoreType {
 			c.response.ServerError(w, "connect to db doesn't exist")
@@ -104,14 +104,14 @@ func (c *Controller) GetMetric() http.HandlerFunc {
 		}
 
 		if form.IsGaugeType() {
-			value, _ := c.ms.GetGaugeValue(form.ID)
+			value, _ := c.st.GetGaugeValue(form.ID)
 			form.Value = &value
 			c.response.Send(r.Context(), w, http.StatusOK, form)
 			return
 		}
 
 		if form.IsCounterType() {
-			value, _ := c.ms.GetCounterValue(form.ID)
+			value, _ := c.st.GetCounterValue(form.ID)
 			form.Delta = &value
 			c.response.Send(r.Context(), w, http.StatusOK, form)
 			return
@@ -132,7 +132,7 @@ func (c *Controller) UpdateCounter() http.HandlerFunc {
 			c.response.BadRequestError(w, convErr.Error())
 		}
 
-		c.ms.AddCounterValue(metric, value)
+		c.st.AddCounterValue(metric, value)
 
 		c.syncStateLogger(req)
 
@@ -149,7 +149,7 @@ func (c *Controller) UpdateGauge() http.HandlerFunc {
 			c.response.BadRequestError(w, convErr.Error())
 		}
 
-		c.ms.SetGaugeValue(metric, value)
+		c.st.SetGaugeValue(metric, value)
 
 		c.syncStateLogger(req)
 
@@ -161,7 +161,7 @@ func (c *Controller) GetCounter() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		metric := r.PathValue(metricReqPathName)
 
-		val, hasVal := c.ms.GetCounterValue(metric)
+		val, hasVal := c.st.GetCounterValue(metric)
 
 		if !hasVal {
 			http.NotFound(w, r)
@@ -176,7 +176,7 @@ func (c *Controller) GetGauge() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		metric := r.PathValue(metricReqPathName)
 
-		val, hasVal := c.ms.GetGaugeValue(metric)
+		val, hasVal := c.st.GetGaugeValue(metric)
 
 		if !hasVal {
 			http.NotFound(w, r)
@@ -190,7 +190,7 @@ func (c *Controller) GetGauge() http.HandlerFunc {
 func (c *Controller) syncStateLogger(r *http.Request) {
 	storeInterval := c.conf.GetStoreInterval()
 	if storeInterval == 0 {
-		err := c.ms.FlushStorage(r.Context())
+		err := c.st.FlushStorage(r.Context())
 		if err != nil {
 			c.l.ErrorCtx(r.Context(), "sync state error", zap.Error(err))
 		}

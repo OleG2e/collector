@@ -51,7 +51,7 @@ func (d *DBStorage) GetStoreType() StoreType {
 	return DBStoreType
 }
 
-func (d *DBStorage) store(ctx context.Context, m *Metrics) error {
+func (d *DBStorage) Store(ctx context.Context, m *Metrics) error {
 	tx, err := d.poolConn.Begin(ctx)
 
 	if err != nil {
@@ -92,7 +92,7 @@ func (d *DBStorage) store(ctx context.Context, m *Metrics) error {
 	return nil
 }
 
-func (d *DBStorage) restore(ctx context.Context) (*Metrics, error) {
+func (d *DBStorage) Restore(ctx context.Context) (*Metrics, error) {
 	m := Metrics{
 		Counters: make(map[string]int64),
 		Gauges:   make(map[string]float64),

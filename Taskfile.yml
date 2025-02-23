@@ -39,6 +39,9 @@ tasks:
     cmds:
       - cd cmd/server && ./server -i 0 -d "postgres://root:root@localhost:5432/collector?sslmode=disable"
   tests:
+    deps:
+      - build_agent
+      - build_server
     cmds:
       - task: test1
       - task: test2
@@ -56,43 +59,43 @@ tasks:
       - echo "Tests are done"
   test1:
     cmds:
-      - cd cmd/server && go build -buildvcs=false -o server && cd ../.. && metricstest -test.v -test.run=^TestIteration1$  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080
+      - metricstest -test.v -test.run=^TestIteration1$  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080
   test2:
     cmds:
-      - cd cmd/server && go build -buildvcs=false -o server && cd ../.. && metricstest -test.v -test.run=TestIteration2  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080
+      - metricstest -test.v -test.run=TestIteration2  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080
   test3:
     cmds:
-      - cd cmd/server && go build -buildvcs=false -o server && cd ../.. && metricstest -test.v -test.run=TestIteration3  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080
+      - metricstest -test.v -test.run=TestIteration3  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080
   test4:
     cmds:
-      - cd cmd/server && go build -buildvcs=false -o server && cd ../.. && metricstest -test.v -test.run=TestIteration4  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080
+      - metricstest -test.v -test.run=TestIteration4  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080
   test5:
     cmds:
-      - cd cmd/server && go build -buildvcs=false -o server && cd ../.. && metricstest -test.v -test.run=TestIteration5  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080
+      - metricstest -test.v -test.run=TestIteration5  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080
   test6:
     cmds:
-      - cd cmd/server && go build -buildvcs=false -o server && cd ../.. && metricstest -test.v -test.run=TestIteration6  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080
+      - metricstest -test.v -test.run=TestIteration6  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080
   test7:
     cmds:
-      - cd cmd/server && go build -buildvcs=false -o server && cd ../.. && metricstest -test.v -test.run=TestIteration7  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080
+      - metricstest -test.v -test.run=TestIteration7  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080
   test8:
     cmds:
-      - cd cmd/server && go build -buildvcs=false -o server && cd ../.. && metricstest -test.v -test.run=TestIteration8  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080
+      - metricstest -test.v -test.run=TestIteration8  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080
   test9:
     cmds:
-      - cd cmd/server && go build -buildvcs=false -o server && cd ../.. && metricstest -test.v -test.run=TestIteration9  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080 -file-storage-path=storage.db
+      - metricstest -test.v -test.run=TestIteration9  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080 -file-storage-path=storage.db
   test10:
     cmds:
-      - cd cmd/server && go build -buildvcs=false -o server && cd ../.. && metricstest -test.v -test.run=TestIteration10  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080 -file-storage-path=storage.db -database-dsn='postgres://root:root@localhost:5432/collector?sslmode=disable'
+      - metricstest -test.v -test.run=TestIteration10  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080 -file-storage-path=storage.db -database-dsn='postgres://root:root@localhost:5432/collector?sslmode=disable'
   test11:
     cmds:
-      - cd cmd/server && go build -buildvcs=false -o server && cd ../.. && metricstest -test.v -test.run=TestIteration11  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080 -file-storage-path=storage.db -database-dsn='postgres://root:root@localhost:5432/collector?sslmode=disable'
+      - metricstest -test.v -test.run=TestIteration11  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080 -file-storage-path=storage.db -database-dsn='postgres://root:root@localhost:5432/collector?sslmode=disable'
   test12:
     cmds:
-      - cd cmd/server && go build -buildvcs=false -o server && cd ../.. && metricstest -test.v -test.run=TestIteration12  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080 -file-storage-path=storage.db -database-dsn='postgres://root:root@localhost:5432/collector?sslmode=disable'
+      - metricstest -test.v -test.run=TestIteration12  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080 -file-storage-path=storage.db -database-dsn='postgres://root:root@localhost:5432/collector?sslmode=disable'
   test13:
     cmds:
-      - cd cmd/server && go build -buildvcs=false -o server && cd ../.. && metricstest -test.v -test.run=TestIteration13  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080 -file-storage-path=storage.db -database-dsn='postgres://root:root@localhost:5432/collector?sslmode=disable'
+      - metricstest -test.v -test.run=TestIteration13  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080 -file-storage-path=storage.db -database-dsn='postgres://root:root@localhost:5432/collector?sslmode=disable'
   test14:
     cmds:
-      - cd cmd/server && go build -buildvcs=false -o server && cd ../.. && metricstest -test.v -test.run=TestIteration14  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080 -file-storage-path=storage.db -database-dsn='postgres://root:root@localhost:5432/collector?sslmode=disable'
+      - metricstest -test.v -test.run=TestIteration14  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080 -file-storage-path=storage.db -database-dsn='postgres://root:root@localhost:5432/collector?sslmode=disable'

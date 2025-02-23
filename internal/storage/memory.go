@@ -20,13 +20,13 @@ const (
 )
 
 type StoreAlgo interface {
-	store(ctx context.Context, m *Metrics) error
-	restore(ctx context.Context) (*Metrics, error)
+	Store(ctx context.Context, m *Metrics) error
+	Restore(ctx context.Context) (*Metrics, error)
 	CloseStorage() error
 	GetStoreType() StoreType
 }
 
-type MemStorage struct {
+type Storage struct {
 	Metrics   *Metrics
 	conf      *config.ServerConfig
 	l         *logging.ZapLogger
@@ -39,17 +39,13 @@ type Metrics struct {
 	Gauges   map[string]float64 `json:"gauges"`
 }
 
-func (ms *MemStorage) store(ctx context.Context) error {
+func (ms *Storage) store(ctx context.Context) error {
 	return retry.Try(func() error {
-		return ms.storeAlgo.store(ctx, ms.Metrics)
+		return ms.storeAlgo.Store(ctx, ms.Metrics)
 	})
 }
 
-func (ms *MemStorage) setStoreAlgo(sa StoreAlgo) {
-	ms.storeAlgo = sa
-}
-
-func (ms *MemStorage) AddCounterValue(metricName string, value int64) {
+func (ms *Storage) AddCounterValue(metricName string, value int64) {
 	curVal, hasValue := ms.GetCounterValue(metricName)
 	if !hasValue {
 		ms.setCounterValue(metricName, value)
@@ -59,7 +55,7 @@ func (ms *MemStorage) AddCounterValue(metricName string, value int64) {
 	ms.setCounterValue(metricName, curVal+value)
 }
 
-func (ms *MemStorage) GetCounterValue(metricName string) (int64, bool) {
+func (ms *Storage) GetCounterValue(metricName string) (int64, bool) {
 	ms.mx.RLock()
 	defer ms.mx.RUnlock()
 
@@ -67,14 +63,14 @@ func (ms *MemStorage) GetCounterValue(metricName string) (int64, bool) {
 	return v, hasValue
 }
 
-func (ms *MemStorage) setCounterValue(metricName string, value int64) {
+func (ms *Storage) setCounterValue(metricName string, value int64) {
 	ms.mx.Lock()
 	defer ms.mx.Unlock()
 
 	ms.Metrics.Counters[metricName] = value
 }
 
-func (ms *MemStorage) GetGaugeValue(metricName string) (float64, bool) {
+func (ms *Storage) GetGaugeValue(metricName string) (float64, bool) {
 	ms.mx.RLock()
 	defer ms.mx.RUnlock()
 
@@ -82,7 +78,7 @@ func (ms *MemStorage) GetGaugeValue(metricName string) (float64, bool) {
 	return v, hasValue
 }
 
-func (ms *MemStorage) SetGaugeValue(metricName string, value float64) {
+func (ms *Storage) SetGaugeValue(metricName string, value float64) {
 	ms.mx.Lock()
 	defer ms.mx.Unlock()
 
@@ -106,8 +102,8 @@ func NewMemStorage(
 	l *logging.ZapLogger,
 	conf *config.ServerConfig,
 	storeAlgo StoreAlgo,
-) *MemStorage {
-	ms := &MemStorage{
+) *Storage {
+	ms := &Storage{
 		Metrics:   newMetrics(),
 		l:         l,
 		conf:      conf,
@@ -125,11 +121,11 @@ func newMetrics() *Metrics {
 	}
 }
 
-func (ms *MemStorage) GetStoreAlgo() StoreAlgo {
+func (ms *Storage) GetStoreAlgo() StoreAlgo {
 	return ms.storeAlgo
 }
 
-func (ms *MemStorage) InitFlushStorageTicker(ctx context.Context, storeInterval time.Duration) {
+func (ms *Storage) InitFlushStorageTicker(ctx context.Context, storeInterval time.Duration) {
 	ticker := time.NewTicker(storeInterval)
 	go func() {
 		for range ticker.C {
@@ -140,14 +136,14 @@ func (ms *MemStorage) InitFlushStorageTicker(ctx context.Context, storeInterval 
 	}()
 }
 
-func (ms *MemStorage) RestoreStorage(ctx context.Context) error {
+func (ms *Storage) RestoreStorage(ctx context.Context) error {
 	ms.mx.Lock()
 	defer ms.mx.Unlock()
 
 	var metrics *Metrics
 	var err error
 	tryErr := retry.Try(func() error {
-		metrics, err = ms.storeAlgo.restore(ctx)
+		metrics, err = ms.storeAlgo.Restore(ctx)
 		return err
 	})
 
@@ -162,7 +158,7 @@ func (ms *MemStorage) RestoreStorage(ctx context.Context) error {
 	return nil
 }
 
-func (ms *MemStorage) FlushStorage(ctx context.Context) error {
+func (ms *Storage) FlushStorage(ctx context.Context) error {
 	ms.mx.Lock()
 	defer ms.mx.Unlock()
 
@@ -171,7 +167,7 @@ func (ms *MemStorage) FlushStorage(ctx context.Context) error {
 	})
 }
 
-func (ms *MemStorage) CloseStorage() error {
+func (ms *Storage) CloseStorage() error {
 	return retry.Try(func() error {
 		return ms.storeAlgo.CloseStorage()
 	})

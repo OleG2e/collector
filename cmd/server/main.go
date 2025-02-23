@@ -36,7 +36,7 @@ func main() {
 
 	store := storage.NewMemStorage(l, conf, storeAlgo)
 
-	defer func(storage *storage.MemStorage) {
+	defer func(storage *storage.Storage) {
 		if flushErr := storage.FlushStorage(ctx); flushErr != nil {
 			l.ErrorCtx(ctx, "flush storage error", zap.Error(flushErr))
 		}

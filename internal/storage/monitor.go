@@ -72,16 +72,12 @@ func (s *MonitorStorage) initSendTicker(ctx context.Context) {
 	ticker := time.NewTicker(s.agentConfig.GetReportIntervalDuration())
 	go func() {
 		for range ticker.C {
-			sendGaugeDataErr := s.sendGaugeData(ctx)
-			if sendGaugeDataErr != nil {
-				s.l.ErrorCtx(ctx, "send gauge error", zap.Error(sendGaugeDataErr))
-			}
-			sendCounterDataErr := s.sendCounterData(ctx)
-			if sendCounterDataErr != nil {
-				s.l.ErrorCtx(ctx, "send counter error", zap.Error(sendCounterDataErr))
+			sendDataErr := s.sendData(ctx)
+			if sendDataErr != nil {
+				s.l.ErrorCtx(ctx, "send error", zap.Error(sendDataErr))
 			}
 
-			if sendGaugeDataErr == nil && sendCounterDataErr == nil {
+			if sendDataErr == nil {
 				s.resetPollCount()
 			}
 		}
@@ -160,21 +156,39 @@ func (s *MonitorStorage) getStatForms() ([]network.MetricForm, error) {
 	return forms, nil
 }
 
-func (s *MonitorStorage) sendGaugeData(ctx context.Context) error {
-	address := s.agentConfig.GetAddress()
-	url := "http://" + address + "/update/"
-	sf, err := s.getStatForms()
-	if err != nil {
-		return err
-	}
-	for _, form := range sf {
-		formMarshalled, marshErr := json.Marshal(form)
-		if marshErr != nil {
-			return marshErr
-		}
+func (s *MonitorStorage) getPollCountForm() network.MetricForm {
+	delta := s.getPollCount()
+	return network.MetricForm{ID: "PollCount", MType: "counter", Delta: &delta}
+}
 
-		reader := bytes.NewReader(formMarshalled)
-		req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, url, reader)
+func (s *MonitorStorage) getPollCount() int64 {
+	s.mx.RLock()
+	defer s.mx.RUnlock()
+
+	return s.pollCount
+}
+
+func (s *MonitorStorage) sendData(ctx context.Context) error {
+	address := s.agentConfig.GetAddress()
+	url := "http://" + address + "/updates/"
+
+	stats, statErr := s.getStatForms()
+
+	if statErr != nil {
+		return statErr
+	}
+
+	data := make([]network.MetricForm, len(stats)+1)
+	data = append(data, stats...)
+	data = append(data, s.getPollCountForm())
+
+	dataMarshalled, marshErr := json.Marshal(data)
+	if marshErr != nil {
+		return marshErr
+	}
+
+	tryErr := retry.Try(func() error {
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(dataMarshalled))
 
 		if reqErr != nil {
 			return reqErr
@@ -187,120 +201,6 @@ func (s *MonitorStorage) sendGaugeData(ctx context.Context) error {
 			return reqCloseErr
 		}
 
-		tryErr := retry.Try(func() error {
-			resp, clientErr := s.httpClient.Do(req)
-
-			if clientErr != nil {
-				return clientErr
-			}
-
-			_, bodyErr := io.ReadAll(resp.Body)
-
-			if bodyErr != nil {
-				return bodyErr
-			}
-
-			respCloseErr := resp.Body.Close()
-			if respCloseErr != nil {
-				return respCloseErr
-			}
-			return nil
-		})
-
-		if tryErr != nil {
-			return tryErr
-		}
-	}
-
-	return nil
-}
-
-func (s *MonitorStorage) getPollCount() int64 {
-	s.mx.RLock()
-	defer s.mx.RUnlock()
-
-	return s.pollCount
-}
-
-func (s *MonitorStorage) sendCounterData(ctx context.Context) error {
-	address := s.agentConfig.GetAddress()
-	url := "http://" + address + "/update/"
-
-	pollCount := s.getPollCount()
-	form := network.MetricForm{
-		ID:    "PollCount",
-		MType: "counter",
-		Delta: &pollCount,
-	}
-
-	formMarshalled, marshErr := json.Marshal(form)
-	if marshErr != nil {
-		return marshErr
-	}
-
-	req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(formMarshalled))
-
-	if reqErr != nil {
-		return reqErr
-	}
-
-	req.Header.Add("Content-Type", "application/json")
-
-	reqCloseErr := req.Body.Close()
-	if reqCloseErr != nil {
-		return reqCloseErr
-	}
-
-	tryErr := retry.Try(func() error {
-		resp, clientErr := s.httpClient.Do(req)
-
-		if clientErr != nil {
-			return clientErr
-		}
-
-		_, bodyErr := io.ReadAll(resp.Body)
-
-		if bodyErr != nil {
-			return bodyErr
-		}
-
-		respCloseErr := resp.Body.Close()
-		if respCloseErr != nil {
-			return respCloseErr
-		}
-
-		return nil
-	})
-
-	return tryErr
-}
-
-func (s *MonitorStorage) sendData(ctx context.Context) error {
-	address := s.agentConfig.GetAddress()
-	url := "http://" + address + "/updates/"
-
-	data := s.getStats()
-	data["PollCount"] = s.getPollCount()
-
-	dataMarshalled, marshErr := json.Marshal(data)
-	if marshErr != nil {
-		return marshErr
-	}
-
-	req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(dataMarshalled))
-
-	if reqErr != nil {
-		return reqErr
-	}
-
-	req.Header.Add("Content-Type", "application/json")
-
-	reqCloseErr := req.Body.Close()
-	if reqCloseErr != nil {
-		return reqCloseErr
-	}
-
-	tryErr := retry.Try(func() error {
 		resp, clientErr := s.httpClient.Do(req)
 
 		if clientErr != nil {
