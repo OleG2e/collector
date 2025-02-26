@@ -18,11 +18,11 @@ type FileStorage struct {
 	conf *config.ServerConfig
 }
 
-func NewFileStorage(l *logging.ZapLogger, conf *config.ServerConfig) (*FileStorage, error) {
+func NewFileStorage(l *logging.ZapLogger, conf *config.ServerConfig) *FileStorage {
 	return &FileStorage{
 		l:    l,
 		conf: conf,
-	}, nil
+	}
 }
 
 func (f *FileStorage) GetStoreType() StoreType {

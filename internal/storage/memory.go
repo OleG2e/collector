@@ -89,11 +89,7 @@ func GetStoreAlgo(ctx context.Context, l *logging.ZapLogger, conf *config.Server
 	dbStorage, dbErr := NewDBStorage(ctx, l, conf)
 	if dbErr != nil {
 		l.WarnCtx(ctx, "GetStoreAlgo: failed to connect to database", zap.Error(dbErr))
-		fileStorage, fileErr := NewFileStorage(l, conf)
-		if fileErr != nil {
-			l.PanicCtx(ctx, "failed to create storage", zap.Error(fileErr))
-		}
-		return fileStorage
+		return NewFileStorage(l, conf)
 	}
 	return dbStorage
 }

@@ -30,7 +30,7 @@ func (c *Controller) Routes() *Controller {
 	c.router.Use(middleware.Logger(c.l))
 
 	c.router.Group(func(r chi.Router) {
-		r.Get("/", func(w http.ResponseWriter, req *http.Request) {
+		r.Get("/", func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Add("Content-Type", "text/html")
 			w.WriteHeader(http.StatusOK)
 		})
