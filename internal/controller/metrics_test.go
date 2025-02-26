@@ -19,7 +19,7 @@ func TestController_GetCounter(t *testing.T) {
 		ctx      context.Context
 		router   chi.Router
 		response *response.Response
-		ms       *storage.MemStorage
+		ms       *storage.Storage
 		conf     *config.ServerConfig
 	}
 	tests := []struct {
@@ -33,10 +33,9 @@ func TestController_GetCounter(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &Controller{
 				l:        tt.fields.l,
-				ctx:      tt.fields.ctx,
 				router:   tt.fields.router,
 				response: tt.fields.response,
-				ms:       tt.fields.ms,
+				st:       tt.fields.ms,
 				conf:     tt.fields.conf,
 			}
 			if got := c.GetCounter(); !reflect.DeepEqual(got, tt.want) {
@@ -52,7 +51,7 @@ func TestController_GetGauge(t *testing.T) {
 		ctx      context.Context
 		router   chi.Router
 		response *response.Response
-		ms       *storage.MemStorage
+		ms       *storage.Storage
 		conf     *config.ServerConfig
 	}
 	tests := []struct {
@@ -66,10 +65,9 @@ func TestController_GetGauge(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &Controller{
 				l:        tt.fields.l,
-				ctx:      tt.fields.ctx,
 				router:   tt.fields.router,
 				response: tt.fields.response,
-				ms:       tt.fields.ms,
+				st:       tt.fields.ms,
 				conf:     tt.fields.conf,
 			}
 			if got := c.GetGauge(); !reflect.DeepEqual(got, tt.want) {
@@ -85,7 +83,7 @@ func TestController_GetMetric(t *testing.T) {
 		ctx      context.Context
 		router   chi.Router
 		response *response.Response
-		ms       *storage.MemStorage
+		ms       *storage.Storage
 		conf     *config.ServerConfig
 	}
 	tests := []struct {
@@ -99,10 +97,9 @@ func TestController_GetMetric(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &Controller{
 				l:        tt.fields.l,
-				ctx:      tt.fields.ctx,
 				router:   tt.fields.router,
 				response: tt.fields.response,
-				ms:       tt.fields.ms,
+				st:       tt.fields.ms,
 				conf:     tt.fields.conf,
 			}
 			if got := c.GetMetric(); !reflect.DeepEqual(got, tt.want) {
@@ -118,7 +115,7 @@ func TestController_UpdateCounter(t *testing.T) {
 		ctx      context.Context
 		router   chi.Router
 		response *response.Response
-		ms       *storage.MemStorage
+		ms       *storage.Storage
 		conf     *config.ServerConfig
 	}
 	tests := []struct {
@@ -132,10 +129,9 @@ func TestController_UpdateCounter(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &Controller{
 				l:        tt.fields.l,
-				ctx:      tt.fields.ctx,
 				router:   tt.fields.router,
 				response: tt.fields.response,
-				ms:       tt.fields.ms,
+				st:       tt.fields.ms,
 				conf:     tt.fields.conf,
 			}
 			if got := c.UpdateCounter(); !reflect.DeepEqual(got, tt.want) {
@@ -151,7 +147,7 @@ func TestController_UpdateGauge(t *testing.T) {
 		ctx      context.Context
 		router   chi.Router
 		response *response.Response
-		ms       *storage.MemStorage
+		ms       *storage.Storage
 		conf     *config.ServerConfig
 	}
 	tests := []struct {
@@ -165,10 +161,9 @@ func TestController_UpdateGauge(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &Controller{
 				l:        tt.fields.l,
-				ctx:      tt.fields.ctx,
 				router:   tt.fields.router,
 				response: tt.fields.response,
-				ms:       tt.fields.ms,
+				st:       tt.fields.ms,
 				conf:     tt.fields.conf,
 			}
 			if got := c.UpdateGauge(); !reflect.DeepEqual(got, tt.want) {
@@ -184,7 +179,7 @@ func TestController_UpdateMetric(t *testing.T) {
 		ctx      context.Context
 		router   chi.Router
 		response *response.Response
-		ms       *storage.MemStorage
+		ms       *storage.Storage
 		conf     *config.ServerConfig
 	}
 	tests := []struct {
@@ -198,10 +193,9 @@ func TestController_UpdateMetric(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &Controller{
 				l:        tt.fields.l,
-				ctx:      tt.fields.ctx,
 				router:   tt.fields.router,
 				response: tt.fields.response,
-				ms:       tt.fields.ms,
+				st:       tt.fields.ms,
 				conf:     tt.fields.conf,
 			}
 			if got := c.UpdateMetric(); !reflect.DeepEqual(got, tt.want) {
@@ -217,7 +211,7 @@ func TestController_syncStateLogger(t *testing.T) {
 		ctx      context.Context
 		router   chi.Router
 		response *response.Response
-		ms       *storage.MemStorage
+		ms       *storage.Storage
 		conf     *config.ServerConfig
 	}
 	type args struct {
@@ -234,10 +228,9 @@ func TestController_syncStateLogger(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &Controller{
 				l:        tt.fields.l,
-				ctx:      tt.fields.ctx,
 				router:   tt.fields.router,
 				response: tt.fields.response,
-				ms:       tt.fields.ms,
+				st:       tt.fields.ms,
 				conf:     tt.fields.conf,
 			}
 			c.syncStateLogger(tt.args.r)

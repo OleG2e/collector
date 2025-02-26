@@ -1,27 +1,37 @@
 package storage
 
 import (
-	"bufio"
 	"context"
-	"encoding/json"
-	"io"
-	"os"
-	"path"
 	"sync"
 	"time"
+
+	"github.com/OleG2e/collector/pkg/retry"
 
 	"github.com/OleG2e/collector/internal/config"
 	"github.com/OleG2e/collector/pkg/logging"
 	"go.uber.org/zap"
 )
 
-type MemStorage struct {
-	Metrics Metrics
-	DBFile  *os.File
-	conf    *config.ServerConfig
-	l       *logging.ZapLogger
-	ctx     context.Context
-	mx      *sync.RWMutex
+type StoreType string
+
+const (
+	FileStoreType = StoreType("file")
+	DBStoreType   = StoreType("db")
+)
+
+type StoreAlgo interface {
+	Store(ctx context.Context, m *Metrics) error
+	Restore(ctx context.Context) (*Metrics, error)
+	CloseStorage() error
+	GetStoreType() StoreType
+}
+
+type Storage struct {
+	Metrics   *Metrics
+	conf      *config.ServerConfig
+	l         *logging.ZapLogger
+	mx        *sync.RWMutex
+	storeAlgo StoreAlgo
 }
 
 type Metrics struct {
@@ -29,7 +39,13 @@ type Metrics struct {
 	Gauges   map[string]float64 `json:"gauges"`
 }
 
-func (ms *MemStorage) AddCounterValue(metricName string, value int64) {
+func (ms *Storage) store(ctx context.Context) error {
+	return retry.Try(func() error {
+		return ms.storeAlgo.Store(ctx, ms.Metrics)
+	})
+}
+
+func (ms *Storage) AddCounterValue(metricName string, value int64) {
 	curVal, hasValue := ms.GetCounterValue(metricName)
 	if !hasValue {
 		ms.setCounterValue(metricName, value)
@@ -39,7 +55,7 @@ func (ms *MemStorage) AddCounterValue(metricName string, value int64) {
 	ms.setCounterValue(metricName, curVal+value)
 }
 
-func (ms *MemStorage) GetCounterValue(metricName string) (int64, bool) {
+func (ms *Storage) GetCounterValue(metricName string) (int64, bool) {
 	ms.mx.RLock()
 	defer ms.mx.RUnlock()
 
@@ -47,14 +63,14 @@ func (ms *MemStorage) GetCounterValue(metricName string) (int64, bool) {
 	return v, hasValue
 }
 
-func (ms *MemStorage) setCounterValue(metricName string, value int64) {
+func (ms *Storage) setCounterValue(metricName string, value int64) {
 	ms.mx.Lock()
 	defer ms.mx.Unlock()
 
 	ms.Metrics.Counters[metricName] = value
 }
 
-func (ms *MemStorage) GetGaugeValue(metricName string) (float64, bool) {
+func (ms *Storage) GetGaugeValue(metricName string) (float64, bool) {
 	ms.mx.RLock()
 	defer ms.mx.RUnlock()
 
@@ -62,125 +78,93 @@ func (ms *MemStorage) GetGaugeValue(metricName string) (float64, bool) {
 	return v, hasValue
 }
 
-func (ms *MemStorage) SetGaugeValue(metricName string, value float64) {
+func (ms *Storage) SetGaugeValue(metricName string, value float64) {
 	ms.mx.Lock()
 	defer ms.mx.Unlock()
 
 	ms.Metrics.Gauges[metricName] = value
 }
 
-func NewMemStorage(ctx context.Context, l *logging.ZapLogger, conf *config.ServerConfig) *MemStorage {
-	ms := &MemStorage{
-		Metrics: newMetrics(),
-		l:       l,
-		ctx:     ctx,
-		conf:    conf,
-		mx:      &sync.RWMutex{},
+func GetStoreAlgo(ctx context.Context, l *logging.ZapLogger, conf *config.ServerConfig) StoreAlgo {
+	dbStorage, dbErr := NewDBStorage(ctx, l, conf)
+	if dbErr != nil {
+		l.WarnCtx(ctx, "GetStoreAlgo: failed to connect to database", zap.Error(dbErr))
+		return NewFileStorage(l, conf)
+	}
+	return dbStorage
+}
+
+func NewMemStorage(
+	l *logging.ZapLogger,
+	conf *config.ServerConfig,
+	storeAlgo StoreAlgo,
+) *Storage {
+	ms := &Storage{
+		Metrics:   newMetrics(),
+		l:         l,
+		conf:      conf,
+		storeAlgo: storeAlgo,
+		mx:        &sync.RWMutex{},
 	}
 
 	return ms
 }
 
-func newMetrics() Metrics {
-	return Metrics{
+func newMetrics() *Metrics {
+	return &Metrics{
 		Counters: make(map[string]int64),
 		Gauges:   make(map[string]float64),
 	}
 }
 
-func (ms *MemStorage) InitFlushStorageTicker(storeInterval time.Duration) {
+func (ms *Storage) GetStoreAlgo() StoreAlgo {
+	return ms.storeAlgo
+}
+
+func (ms *Storage) InitFlushStorageTicker(ctx context.Context, storeInterval time.Duration) {
 	ticker := time.NewTicker(storeInterval)
 	go func() {
 		for range ticker.C {
-			if err := ms.FlushStorage(); err != nil {
-				ms.l.ErrorCtx(ms.ctx, "flush storage error", zap.Error(err))
+			if err := ms.FlushStorage(ctx); err != nil {
+				ms.l.ErrorCtx(ctx, "flush storage error", zap.Error(err))
 			}
 		}
 	}()
 }
 
-func (ms *MemStorage) RestoreStorage() {
+func (ms *Storage) RestoreStorage(ctx context.Context) error {
 	ms.mx.Lock()
 	defer ms.mx.Unlock()
 
-	file, fileErr := os.Open(ms.conf.FileStoragePath)
-
-	defer func(file *os.File) {
-		if file == nil {
-			ms.l.WarnCtx(ms.ctx, "restore file doesn't exist")
-			return
-		}
-
-		fileCloseErr := file.Close()
-		if fileCloseErr != nil {
-			ms.l.WarnCtx(ms.ctx, "file close error", zap.Error(fileCloseErr))
-		}
-	}(file)
-
-	if file == nil {
-		return
-	}
-
-	if fileErr != nil {
-		ms.l.WarnCtx(ms.ctx, "open DB file error", zap.Error(fileErr))
-		return
-	}
-
-	dec := json.NewDecoder(bufio.NewReader(file))
-
-	lastState := newMetrics()
-
-	if err := dec.Decode(&lastState); err != nil && err != io.EOF {
-		ms.l.FatalCtx(ms.ctx, "restore storage error", zap.Error(err))
-	}
-
-	ms.Metrics = lastState
-}
-
-func (ms *MemStorage) FlushStorage() error {
-	ms.mx.Lock()
-	defer ms.mx.Unlock()
-
-	var tmpFileName string
-	err := func() error {
-		dir := path.Dir(ms.conf.FileStoragePath)
-		tmpFile, tmpFileErr := os.CreateTemp(dir, "collector-*.bak")
-		if tmpFileErr != nil {
-			return tmpFileErr
-		}
-
-		tmpFileName = tmpFile.Name()
-
-		defer func(tmpFile *os.File) {
-			fileCloseErr := tmpFile.Close()
-			if fileCloseErr != nil {
-				ms.l.WarnCtx(ms.ctx, "tmp file close error", zap.Error(fileCloseErr))
-			}
-		}(tmpFile)
-
-		data, err := json.Marshal(&ms.Metrics)
-		if err != nil {
-			return err
-		}
-
-		_, err = tmpFile.Write(data)
-
-		if err != nil {
-			return err
-		}
-
-		return nil
-	}()
-
-	if err != nil {
-		removeErr := os.Remove(tmpFileName)
-		if removeErr != nil {
-			ms.l.WarnCtx(ms.ctx, "tmp file remove error", zap.Error(removeErr))
-		}
+	var metrics *Metrics
+	var err error
+	tryErr := retry.Try(func() error {
+		metrics, err = ms.storeAlgo.Restore(ctx)
 		return err
+	})
+
+	if tryErr != nil {
+		return tryErr
 	}
 
-	err = os.Rename(tmpFileName, ms.conf.FileStoragePath)
+	if metrics != nil {
+		ms.Metrics = metrics
+	}
 
-	return err
+	return nil
+}
+
+func (ms *Storage) FlushStorage(ctx context.Context) error {
+	ms.mx.Lock()
+	defer ms.mx.Unlock()
+
+	return retry.Try(func() error {
+		return ms.store(ctx)
+	})
+}
+
+func (ms *Storage) CloseStorage() error {
+	return retry.Try(func() error {
+		return ms.storeAlgo.CloseStorage()
+	})
 }

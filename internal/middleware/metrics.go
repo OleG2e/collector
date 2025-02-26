@@ -22,7 +22,7 @@ func AllowedMetricsOnly(l *logging.ZapLogger) func(next http.Handler) http.Handl
 			form, decodeErr := network.NewFormByRequest(r)
 			hasAllowedMetric := form.IsGaugeType() || form.IsCounterType()
 			if decodeErr != nil || !hasAllowedMetric {
-				response.New(l, r.Context()).BadRequestError(w, http.StatusText(http.StatusBadRequest))
+				response.New(l).BadRequestError(w, http.StatusText(http.StatusBadRequest))
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -33,7 +33,7 @@ func AllowedMetricsOnly(l *logging.ZapLogger) func(next http.Handler) http.Handl
 }
 
 func hasAllowedMetricByURLPath(path string) bool {
-	allowedMetricTypes := []string{"gauge", "counter"}
+	allowedMetricTypes := []string{string(network.MetricTypeGauge), string(network.MetricTypeCounter)}
 
 	return slices.ContainsFunc(allowedMetricTypes, func(m string) bool {
 		return strings.Contains(path, m)

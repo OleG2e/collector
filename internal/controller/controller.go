@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/OleG2e/collector/internal/config"
@@ -15,15 +14,14 @@ import (
 
 type Controller struct {
 	l        *logging.ZapLogger
-	ctx      context.Context
 	router   chi.Router
 	response *response.Response
-	ms       *storage.MemStorage
+	st       *storage.Storage
 	conf     *config.ServerConfig
 }
 
-func New(logger *logging.ZapLogger, ctx context.Context, ms *storage.MemStorage, conf *config.ServerConfig) *Controller {
-	return &Controller{l: logger, ms: ms, conf: conf, router: chi.NewRouter(), response: response.New(logger, ctx)}
+func New(logger *logging.ZapLogger, st *storage.Storage, conf *config.ServerConfig) *Controller {
+	return &Controller{l: logger, st: st, conf: conf, router: chi.NewRouter(), response: response.New(logger)}
 }
 
 func (c *Controller) Routes() *Controller {
@@ -32,13 +30,12 @@ func (c *Controller) Routes() *Controller {
 	c.router.Use(middleware.Logger(c.l))
 
 	c.router.Group(func(r chi.Router) {
-		r.Get("/", func(w http.ResponseWriter, req *http.Request) {
+		r.Get("/", func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Add("Content-Type", "text/html")
 			w.WriteHeader(http.StatusOK)
 		})
-		r.Get("/ping", func(w http.ResponseWriter, req *http.Request) {
-			w.WriteHeader(http.StatusOK)
-		})
+		r.Get("/ping", c.PingDB())
+		r.Post("/updates/", c.UpdateMetrics())
 	})
 
 	c.router.Route("/", func(r chi.Router) {

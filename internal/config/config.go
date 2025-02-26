@@ -32,20 +32,14 @@ type (
 	ServerConfig struct {
 		LogLevel        string `env:"LOG_LEVEL"`
 		Address         string `env:"ADDRESS"`
-		StoreInterval   int    `env:"STORE_INTERVAL"`
 		FileStoragePath string `env:"FILE_STORAGE_PATH"`
+		DSN             string `env:"DATABASE_DSN"`
+		StoreInterval   int    `env:"STORE_INTERVAL"`
 		Restore         bool   `env:"RESTORE"`
 	}
 )
 
 func NewAgentConfig(ctx context.Context, l *logging.ZapLogger) (*AgentConfig, error) {
-	var (
-		addr     string
-		logLevel string
-		ri       int
-		pi       int
-	)
-
 	c := AgentConfig{}
 
 	err := env.Parse(&c)
@@ -60,6 +54,11 @@ func NewAgentConfig(ctx context.Context, l *logging.ZapLogger) (*AgentConfig, er
 	if err != nil {
 		return nil, err
 	}
+
+	var (
+		addr, logLevel string
+		ri, pi         int
+	)
 
 	flag.StringVar(&logLevel, "log_level", "info", "log level")
 	flag.StringVar(&addr, "a", "localhost:8080", "server address")
@@ -99,35 +98,35 @@ func NewAgentConfig(ctx context.Context, l *logging.ZapLogger) (*AgentConfig, er
 }
 
 func NewServerConfig(ctx context.Context, l *logging.ZapLogger) (*ServerConfig, error) {
-	var (
-		addr     string
-		logLevel string
-		fs       string
-		si       int
-		r        bool
-	)
-
 	c := ServerConfig{}
 
 	err := env.Parse(&c)
 
 	l.DebugCtx(ctx, "init server env config",
 		zap.String("ADDRESS", os.Getenv("ADDRESS")),
-		zap.String("LOG_LEVEL", logLevel),
+		zap.String("LOG_LEVEL", os.Getenv("LOG_LEVEL")),
 		zap.String("STORE_INTERVAL", os.Getenv("STORE_INTERVAL")),
 		zap.String("FILE_STORAGE_PATH", os.Getenv("FILE_STORAGE_PATH")),
 		zap.String("RESTORE", os.Getenv("RESTORE")),
+		zap.String("DATABASE_DSN", os.Getenv("DATABASE_DSN")),
 	)
 
 	if err != nil {
 		return nil, err
 	}
 
+	var (
+		addr, logLevel, fs, dsn string
+		si                      int
+		r                       bool
+	)
+
 	flag.StringVar(&addr, "a", "localhost:8080", "server host:port")
-	flag.StringVar(&logLevel, "log_level", "info", "log level")
+	flag.StringVar(&logLevel, "log_level", "debug", "log level")
 	flag.IntVar(&si, "i", defaultStoreIntervalSeconds, "store interval")
 	flag.StringVar(&fs, "f", "storage.db", "file storage path")
 	flag.BoolVar(&r, "r", true, "restore previous data")
+	flag.StringVar(&dsn, "d", "", "postgres DSN")
 
 	flag.Parse()
 
@@ -135,6 +134,7 @@ func NewServerConfig(ctx context.Context, l *logging.ZapLogger) (*ServerConfig, 
 		zap.String("ADDRESS", addr),
 		zap.String("FILE_STORAGE_PATH", fs),
 		zap.String("LOG_LEVEL", logLevel),
+		zap.String("DATABASE_DSN", dsn),
 		zap.Int("STORE_INTERVAL", si),
 		zap.Bool("RESTORE", r),
 	)
@@ -147,6 +147,9 @@ func NewServerConfig(ctx context.Context, l *logging.ZapLogger) (*ServerConfig, 
 	}
 	if c.FileStoragePath == "" {
 		c.FileStoragePath = fs
+	}
+	if c.DSN == "" {
+		c.DSN = dsn
 	}
 
 	v, ok := os.LookupEnv("STORE_INTERVAL")
@@ -177,6 +180,7 @@ func NewServerConfig(ctx context.Context, l *logging.ZapLogger) (*ServerConfig, 
 		zap.Int("STORE_INTERVAL", c.StoreInterval),
 		zap.Bool("RESTORE", c.Restore),
 		zap.String("LOG_LEVEL", c.LogLevel),
+		zap.String("DATABASE_DSN", c.DSN),
 	)
 
 	return &c, nil
@@ -222,4 +226,8 @@ func (c *ServerConfig) GetStoreIntervalDuration() time.Duration {
 
 func (c *ServerConfig) GetStoreInterval() int {
 	return c.StoreInterval
+}
+
+func (c *ServerConfig) GetDSN() string {
+	return c.DSN
 }

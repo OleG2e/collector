@@ -10,14 +10,12 @@ import (
 )
 
 type Response struct {
-	l   *logging.ZapLogger
-	ctx context.Context
+	l *logging.ZapLogger
 }
 
-func New(l *logging.ZapLogger, ctx context.Context) *Response {
+func New(l *logging.ZapLogger) *Response {
 	return &Response{
-		l:   l,
-		ctx: ctx,
+		l: l,
 	}
 }
 
@@ -33,17 +31,21 @@ func (resp *Response) BadRequestError(writer http.ResponseWriter, e string) {
 	http.Error(writer, e, http.StatusBadRequest)
 }
 
+func (resp *Response) ServerError(writer http.ResponseWriter, e string) {
+	http.Error(writer, e, http.StatusInternalServerError)
+}
+
 func setStatusCode(writer http.ResponseWriter, statusCode int) {
 	writer.WriteHeader(statusCode)
 }
 
-func (resp *Response) Send(writer http.ResponseWriter, statusCode int, data any) {
+func (resp *Response) Send(ctx context.Context, writer http.ResponseWriter, statusCode int, data any) {
 	setDefaultHeaders(writer)
 	setStatusCode(writer, statusCode)
 
 	err := json.NewEncoder(writer).Encode(data)
 	if err != nil {
-		resp.l.ErrorCtx(resp.ctx, "error encoding response", zap.Error(err))
+		resp.l.ErrorCtx(ctx, "error encoding response", zap.Error(err))
 		return
 	}
 }
