@@ -1,7 +1,12 @@
 package middleware
 
 import (
+	"bytes"
 	"compress/gzip"
+	"github.com/OleG2e/collector/internal/config"
+	"github.com/OleG2e/collector/internal/network"
+	"github.com/OleG2e/collector/internal/response"
+	"github.com/OleG2e/collector/pkg/hashing"
 	"io"
 	"net/http"
 	"strings"
@@ -137,6 +142,37 @@ func Recover(l *logging.ZapLogger) func(next http.Handler) http.Handler {
 					http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 				}
 			}()
+
+			next.ServeHTTP(w, r)
+		}
+
+		return http.HandlerFunc(fn)
+	}
+}
+
+func CheckSign(config *config.ServerConfig, l *logging.ZapLogger) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		fn := func(w http.ResponseWriter, r *http.Request) {
+			if config.HasHashKey() {
+				headerHash := r.Header.Get(network.HashHeader)
+				l.InfoCtx(r.Context(), "check sign", zap.String("headerHash", headerHash))
+				if headerHash != "" {
+					var bodyBuffer, bodyData bytes.Buffer
+					r.Body = io.NopCloser(io.TeeReader(r.Body, &bodyBuffer))
+					_, readErr := bodyData.ReadFrom(r.Body)
+					if readErr != nil {
+						l.ErrorCtx(r.Context(), "sign error", zap.Error(readErr))
+						return
+					}
+					r.Body = io.NopCloser(&bodyBuffer)
+
+					hashBody := hashing.HashByKey(bodyData.String(), config.GetHashKey())
+					if headerHash != hashBody {
+						response.New(l, config).BadRequestError(w, http.StatusText(http.StatusBadRequest))
+						return
+					}
+				}
+			}
 
 			next.ServeHTTP(w, r)
 		}

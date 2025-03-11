@@ -37,7 +37,7 @@ tasks:
     deps:
       - build_server
     cmds:
-      - cd cmd/server && ./server -i 0 -d "postgres://root:root@localhost:5432/collector?sslmode=disable"
+      - cd cmd/server && ./server -i 0 -d "postgres://root:root@localhost:5432/collector?sslmode=disable" -k=test
   tests:
     deps:
       - build_agent
@@ -56,6 +56,7 @@ tasks:
       - task: test11
       - task: test12
       - task: test13
+      - task: test14
       - echo "Tests are done"
   test1:
     cmds:
@@ -98,4 +99,4 @@ tasks:
       - metricstest -test.v -test.run=TestIteration13  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080 -file-storage-path=storage.db -database-dsn='postgres://root:root@localhost:5432/collector?sslmode=disable'
   test14:
     cmds:
-      - metricstest -test.v -test.run=TestIteration14  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080 -file-storage-path=storage.db -database-dsn='postgres://root:root@localhost:5432/collector?sslmode=disable'
+      - metricstest -test.v -test.run=TestIteration14  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080 -file-storage-path=storage.db -database-dsn='postgres://root:root@localhost:5432/collector?sslmode=disable' -key=test_key

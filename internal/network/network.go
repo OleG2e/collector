@@ -15,6 +15,8 @@ const (
 	MetricTypeCounter = MetricType("counter")
 )
 
+const HashHeader = "HashSHA256"
+
 type MetricForm struct {
 	ID    string     `json:"id"`              // имя метрики
 	MType MetricType `json:"type"`            // параметр, принимающий значение gauge или counter

@@ -21,13 +21,14 @@ type Controller struct {
 }
 
 func New(logger *logging.ZapLogger, st *storage.Storage, conf *config.ServerConfig) *Controller {
-	return &Controller{l: logger, st: st, conf: conf, router: chi.NewRouter(), response: response.New(logger)}
+	return &Controller{l: logger, st: st, conf: conf, router: chi.NewRouter(), response: response.New(logger, conf)}
 }
 
 func (c *Controller) Routes() *Controller {
 	c.router.Use(middleware.Recover(c.l))
 	c.router.Use(middleware.GzipMiddleware(c.l))
 	c.router.Use(middleware.Logger(c.l))
+	c.router.Use(middleware.CheckSign(c.conf, c.l))
 
 	c.router.Group(func(r chi.Router) {
 		r.Get("/", func(w http.ResponseWriter, _ *http.Request) {
@@ -39,7 +40,7 @@ func (c *Controller) Routes() *Controller {
 	})
 
 	c.router.Route("/", func(r chi.Router) {
-		r.Use(middleware.AllowedMetricsOnly(c.l))
+		r.Use(middleware.AllowedMetricsOnly(c.l, c.conf))
 		r.Post("/update/", c.UpdateMetric())
 		r.Post("/value/", c.GetMetric())
 

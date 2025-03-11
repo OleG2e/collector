@@ -28,6 +28,7 @@ type (
 		Address        string `env:"ADDRESS"`
 		ReportInterval int    `env:"REPORT_INTERVAL"`
 		PollInterval   int    `env:"POLL_INTERVAL"`
+		HashKey        string `env:"KEY"`
 	}
 	ServerConfig struct {
 		LogLevel        string `env:"LOG_LEVEL"`
@@ -36,6 +37,7 @@ type (
 		DSN             string `env:"DATABASE_DSN"`
 		StoreInterval   int    `env:"STORE_INTERVAL"`
 		Restore         bool   `env:"RESTORE"`
+		HashKey         string `env:"KEY"`
 	}
 )
 
@@ -49,6 +51,7 @@ func NewAgentConfig(ctx context.Context, l *logging.ZapLogger) (*AgentConfig, er
 		zap.String("ADDRESS", os.Getenv("ADDRESS")),
 		zap.String("REPORT_INTERVAL", os.Getenv("REPORT_INTERVAL")),
 		zap.String("POLL_INTERVAL", os.Getenv("POLL_INTERVAL")),
+		zap.String("KEY", os.Getenv("KEY")),
 	)
 
 	if err != nil {
@@ -56,12 +59,13 @@ func NewAgentConfig(ctx context.Context, l *logging.ZapLogger) (*AgentConfig, er
 	}
 
 	var (
-		addr, logLevel string
-		ri, pi         int
+		addr, logLevel, hashKey string
+		ri, pi                  int
 	)
 
 	flag.StringVar(&logLevel, "log_level", "info", "log level")
 	flag.StringVar(&addr, "a", "localhost:8080", "server address")
+	flag.StringVar(&hashKey, "k", "", "hash key")
 	flag.IntVar(&ri, "r", defaultReportIntervalSeconds, "report interval")
 	flag.IntVar(&pi, "p", defaultPollIntervalSeconds, "poll interval")
 
@@ -70,6 +74,7 @@ func NewAgentConfig(ctx context.Context, l *logging.ZapLogger) (*AgentConfig, er
 	l.DebugCtx(ctx, "init agent flags config",
 		zap.String("LOG_LEVEL", logLevel),
 		zap.String("ADDRESS", addr),
+		zap.String("KEY", hashKey),
 		zap.Int("REPORT_INTERVAL", ri),
 		zap.Int("POLL_INTERVAL", pi),
 	)
@@ -79,6 +84,9 @@ func NewAgentConfig(ctx context.Context, l *logging.ZapLogger) (*AgentConfig, er
 	}
 	if c.Address == "" {
 		c.Address = addr
+	}
+	if c.HashKey == "" {
+		c.HashKey = hashKey
 	}
 	if c.ReportInterval == 0 {
 		c.ReportInterval = ri
@@ -92,6 +100,7 @@ func NewAgentConfig(ctx context.Context, l *logging.ZapLogger) (*AgentConfig, er
 		zap.Int("REPORT_INTERVAL", c.ReportInterval),
 		zap.Int("POLL_INTERVAL", c.PollInterval),
 		zap.String("LOG_LEVEL", c.LogLevel),
+		zap.String("KEY", c.HashKey),
 	)
 
 	return &c, nil
@@ -109,6 +118,7 @@ func NewServerConfig(ctx context.Context, l *logging.ZapLogger) (*ServerConfig, 
 		zap.String("FILE_STORAGE_PATH", os.Getenv("FILE_STORAGE_PATH")),
 		zap.String("RESTORE", os.Getenv("RESTORE")),
 		zap.String("DATABASE_DSN", os.Getenv("DATABASE_DSN")),
+		zap.String("KEY", os.Getenv("KEY")),
 	)
 
 	if err != nil {
@@ -116,13 +126,14 @@ func NewServerConfig(ctx context.Context, l *logging.ZapLogger) (*ServerConfig, 
 	}
 
 	var (
-		addr, logLevel, fs, dsn string
-		si                      int
-		r                       bool
+		addr, logLevel, fs, dsn, hashKey string
+		si                               int
+		r                                bool
 	)
 
 	flag.StringVar(&addr, "a", "localhost:8080", "server host:port")
 	flag.StringVar(&logLevel, "log_level", "debug", "log level")
+	flag.StringVar(&hashKey, "k", "", "hash key")
 	flag.IntVar(&si, "i", defaultStoreIntervalSeconds, "store interval")
 	flag.StringVar(&fs, "f", "storage.db", "file storage path")
 	flag.BoolVar(&r, "r", true, "restore previous data")
@@ -137,6 +148,7 @@ func NewServerConfig(ctx context.Context, l *logging.ZapLogger) (*ServerConfig, 
 		zap.String("DATABASE_DSN", dsn),
 		zap.Int("STORE_INTERVAL", si),
 		zap.Bool("RESTORE", r),
+		zap.String("KEY", hashKey),
 	)
 
 	if c.LogLevel == "" {
@@ -144,6 +156,9 @@ func NewServerConfig(ctx context.Context, l *logging.ZapLogger) (*ServerConfig, 
 	}
 	if c.Address == "" {
 		c.Address = addr
+	}
+	if c.HashKey == "" {
+		c.HashKey = hashKey
 	}
 	if c.FileStoragePath == "" {
 		c.FileStoragePath = fs
@@ -181,6 +196,7 @@ func NewServerConfig(ctx context.Context, l *logging.ZapLogger) (*ServerConfig, 
 		zap.Bool("RESTORE", c.Restore),
 		zap.String("LOG_LEVEL", c.LogLevel),
 		zap.String("DATABASE_DSN", c.DSN),
+		zap.String("KEY", c.HashKey),
 	)
 
 	return &c, nil
@@ -208,6 +224,14 @@ func (c *AgentConfig) GetAddress() string {
 	return c.Address
 }
 
+func (c *AgentConfig) GetHashKey() string {
+	return c.HashKey
+}
+
+func (c *AgentConfig) HasHashKey() bool {
+	return c.HashKey != ""
+}
+
 func (c *ServerConfig) GetAddress() string {
 	return c.Address
 }
@@ -230,4 +254,12 @@ func (c *ServerConfig) GetStoreInterval() int {
 
 func (c *ServerConfig) GetDSN() string {
 	return c.DSN
+}
+
+func (c *ServerConfig) GetHashKey() string {
+	return c.HashKey
+}
+
+func (c *ServerConfig) HasHashKey() bool {
+	return c.HashKey != ""
 }

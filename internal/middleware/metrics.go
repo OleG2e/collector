@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"github.com/OleG2e/collector/internal/config"
 	"net/http"
 	"slices"
 	"strings"
@@ -11,7 +12,7 @@ import (
 	"github.com/OleG2e/collector/internal/response"
 )
 
-func AllowedMetricsOnly(l *logging.ZapLogger) func(next http.Handler) http.Handler {
+func AllowedMetricsOnly(l *logging.ZapLogger, config *config.ServerConfig) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		fn := func(w http.ResponseWriter, r *http.Request) {
 			if hasAllowedMetricByURLPath(r.URL.Path) {
@@ -22,7 +23,7 @@ func AllowedMetricsOnly(l *logging.ZapLogger) func(next http.Handler) http.Handl
 			form, decodeErr := network.NewFormByRequest(r)
 			hasAllowedMetric := form.IsGaugeType() || form.IsCounterType()
 			if decodeErr != nil || !hasAllowedMetric {
-				response.New(l).BadRequestError(w, http.StatusText(http.StatusBadRequest))
+				response.New(l, config).BadRequestError(w, http.StatusText(http.StatusBadRequest))
 				return
 			}
 			next.ServeHTTP(w, r)

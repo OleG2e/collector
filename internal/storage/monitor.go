@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/OleG2e/collector/pkg/hashing"
 	"io"
 	"math/rand"
 	"net/http"
@@ -187,6 +188,11 @@ func (s *MonitorStorage) sendData(ctx context.Context) error {
 		return marshErr
 	}
 
+	hash := ""
+	if s.agentConfig.HasHashKey() {
+		hash = hashing.HashByKey(string(dataMarshalled), s.agentConfig.GetHashKey())
+	}
+
 	tryErr := retry.Try(func() error {
 		req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(dataMarshalled))
 
@@ -195,6 +201,10 @@ func (s *MonitorStorage) sendData(ctx context.Context) error {
 		}
 
 		req.Header.Add("Content-Type", "application/json")
+
+		if s.agentConfig.HasHashKey() {
+			req.Header.Add(network.HashHeader, hash)
+		}
 
 		reqCloseErr := req.Body.Close()
 		if reqCloseErr != nil {

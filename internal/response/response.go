@@ -3,6 +3,9 @@ package response
 import (
 	"context"
 	"encoding/json"
+	"github.com/OleG2e/collector/internal/config"
+	"github.com/OleG2e/collector/internal/network"
+	"github.com/OleG2e/collector/pkg/hashing"
 	"net/http"
 
 	"github.com/OleG2e/collector/pkg/logging"
@@ -10,21 +13,23 @@ import (
 )
 
 type Response struct {
-	l *logging.ZapLogger
+	l    *logging.ZapLogger
+	conf *config.ServerConfig
 }
 
-func New(l *logging.ZapLogger) *Response {
+func New(l *logging.ZapLogger, conf *config.ServerConfig) *Response {
 	return &Response{
-		l: l,
+		l:    l,
+		conf: conf,
 	}
 }
 
-func setDefaultHeaders(writer http.ResponseWriter) {
+func (resp *Response) setDefaultHeaders(writer http.ResponseWriter) {
 	writer.Header().Add("Content-Type", "application/json")
 }
 
 func (resp *Response) Success(writer http.ResponseWriter) {
-	setDefaultHeaders(writer)
+	resp.setDefaultHeaders(writer)
 }
 
 func (resp *Response) BadRequestError(writer http.ResponseWriter, e string) {
@@ -35,17 +40,29 @@ func (resp *Response) ServerError(writer http.ResponseWriter, e string) {
 	http.Error(writer, e, http.StatusInternalServerError)
 }
 
-func setStatusCode(writer http.ResponseWriter, statusCode int) {
+func (resp *Response) setStatusCode(writer http.ResponseWriter, statusCode int) {
 	writer.WriteHeader(statusCode)
 }
 
 func (resp *Response) Send(ctx context.Context, writer http.ResponseWriter, statusCode int, data any) {
-	setDefaultHeaders(writer)
-	setStatusCode(writer, statusCode)
+	resp.setDefaultHeaders(writer)
+	resp.setStatusCode(writer, statusCode)
 
-	err := json.NewEncoder(writer).Encode(data)
+	marshData, err := json.Marshal(data)
+
 	if err != nil {
 		resp.l.ErrorCtx(ctx, "error encoding response", zap.Error(err))
+		return
+	}
+
+	if resp.conf.HasHashKey() {
+		hashBody := hashing.HashByKey(string(marshData), resp.conf.GetHashKey())
+		writer.Header().Add(network.HashHeader, hashBody)
+	}
+
+	_, err = writer.Write(marshData)
+	if err != nil {
+		resp.l.ErrorCtx(ctx, "write response error", zap.Error(err))
 		return
 	}
 }
