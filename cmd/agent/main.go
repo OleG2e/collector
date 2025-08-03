@@ -2,33 +2,32 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 
-	"github.com/OleG2e/collector/internal/config"
-	"github.com/OleG2e/collector/internal/storage"
-	"github.com/OleG2e/collector/pkg/logging"
-	"go.uber.org/zap"
+	"collector/internal/config"
+	"collector/internal/core/services"
+	"collector/pkg/logging"
+	"go.uber.org/fx"
+	"go.uber.org/fx/fxevent"
 )
 
 func main() {
-	l, err := logging.NewZapLogger(zap.DebugLevel)
+	fx.New(
+		fx.WithLogger(func(log *slog.Logger) fxevent.Logger {
+			return &fxevent.SlogLogger{Logger: log}
+		}),
+		fx.Provide(context.Background),
+		fx.Provide(config.NewAgentConfig),
+		fx.Provide(services.NewMonitor),
+		fx.Provide(newLogger),
+		fx.Invoke(runMonitor),
+	).Run()
+}
 
-	if err != nil {
-		log.Panic(err)
-	}
+func runMonitor(ctx context.Context, monitor *services.Monitor) error {
+	return monitor.Run(ctx)
+}
 
-	ctx := context.Background()
-	ctx = l.WithContextFields(ctx, zap.String("app", "agent"))
-
-	defer l.Sync()
-
-	agentConfig, confErr := config.NewAgentConfig(ctx, l)
-	if confErr != nil {
-		l.PanicCtx(ctx, "parse agent config error", zap.Error(err))
-		return
-	}
-
-	l.SetLevel(agentConfig.GetLogLevel())
-
-	storage.RunMonitor(ctx, l, agentConfig)
+func newLogger(conf *config.AgentConfig) *slog.Logger {
+	return logging.NewLogger(conf.GetLogLevel())
 }

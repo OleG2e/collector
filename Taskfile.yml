@@ -15,6 +15,9 @@ tasks:
   pretty:
     cmds:
       - goimports -w .
+  fmt:
+    cmds:
+      - ~/go/golangci-lint/golangci-lint fmt
   migrate:
     cmds:
       - docker run --rm

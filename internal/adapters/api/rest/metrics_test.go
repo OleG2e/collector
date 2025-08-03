@@ -1,15 +1,16 @@
-package middleware
+package rest
 
 import (
+	"collector/pkg/network"
+	"log/slog"
 	"net/http"
 	"testing"
-
-	"github.com/OleG2e/collector/pkg/logging"
 )
 
 func TestAllowedMetricsOnly(t *testing.T) {
 	type args struct {
-		l *logging.ZapLogger
+		resp   *network.Response
+		logger *slog.Logger
 	}
 	tests := []struct {
 		name string

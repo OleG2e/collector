@@ -2,65 +2,117 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
+	"net/http"
 
-	"github.com/OleG2e/collector/internal/config"
-	"github.com/OleG2e/collector/internal/controller"
-	"github.com/OleG2e/collector/internal/storage"
-	"github.com/OleG2e/collector/pkg/logging"
-	"go.uber.org/zap"
+	"collector/internal/adapters/api/rest"
+	"collector/internal/adapters/store"
+	"collector/internal/config"
+	"collector/internal/controller"
+	"collector/internal/core/domain"
+	"collector/internal/core/services"
+	"collector/pkg/logging"
+	"collector/pkg/network"
+	"github.com/go-chi/chi/v5"
+	"go.uber.org/fx"
+	"go.uber.org/fx/fxevent"
 )
 
 func main() {
-	l, zapErr := logging.NewZapLogger(zap.DebugLevel)
+	fx.New(
+		fx.WithLogger(func(log *slog.Logger) fxevent.Logger {
+			return &fxevent.SlogLogger{Logger: log}
+		}),
+		fx.Supply(domain.NewMetrics()),
+		fx.Provide(context.Background),
+		fx.Provide(config.NewServerConfig),
+		fx.Provide(services.NewStoreService),
+		fx.Provide(getStorage),
+		fx.Provide(newLogger),
+		fx.Provide(network.NewResponse),
+		fx.Provide(rest.NewAPI),
+		fx.Provide(rest.NewRouter),
+		fx.Provide(controller.New),
+		fx.Provide(newHTTPServer),
+		fx.Invoke(func(*http.Server) {}),
+	).Run()
+}
 
-	if zapErr != nil {
-		log.Panic(zapErr)
+func newHTTPServer(
+	lc fx.Lifecycle,
+	mux *chi.Mux,
+	logger *slog.Logger,
+	conf *config.ServerConfig,
+	storeService *services.StoreService,
+) *http.Server {
+	srv := &http.Server{
+		Addr:    ":8080",
+		Handler: mux,
 	}
 
-	ctx := context.Background()
-	ctx = l.WithContextFields(ctx, zap.String("app", "server"))
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			logger.Info("http server listening on " + srv.Addr)
 
-	defer l.Sync()
+			go func() {
+				if srvErr := srv.ListenAndServe(); srvErr != nil {
+					logger.ErrorContext(ctx, "http server start error", slog.Any("error", srvErr))
+					if errShutdown := srv.Shutdown(context.Background()); errShutdown != nil {
+						logger.ErrorContext(
+							ctx,
+							"http server shutdown error",
+							slog.Any("error", errShutdown),
+						)
+					}
+				}
+			}()
 
-	conf, confErr := config.NewServerConfig(ctx, l)
-	if confErr != nil {
-		l.PanicCtx(ctx, "parse server config error", zap.Error(confErr))
-	}
+			storeInterval := conf.GetStoreIntervalDuration()
+			if storeInterval > 0 {
+				storeService.InitFlushStorageTicker(ctx, storeInterval)
+			}
 
-	l.SetLevel(conf.GetLogLevel())
+			if conf.Restore {
+				if restoreErr := storeService.Restore(ctx); restoreErr != nil {
+					logger.ErrorContext(ctx, "restore storage error", slog.Any("error", restoreErr))
 
-	storeAlgo := storage.GetStoreAlgo(ctx, l, conf)
+					return restoreErr
+				}
+			}
 
-	l.DebugCtx(ctx, "Using store algo", zap.String("algo", string(storeAlgo.GetStoreType())))
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
+			if flushErr := storeService.Save(ctx); flushErr != nil {
+				logger.ErrorContext(ctx, "flush storage error", slog.Any("error", flushErr))
 
-	store := storage.NewMemStorage(l, conf, storeAlgo)
+				return flushErr
+			}
+			if closeErr := storeService.Close(); closeErr != nil {
+				logger.ErrorContext(ctx, "failed to close storage", slog.Any("error", closeErr))
 
-	defer func(storage *storage.Storage) {
-		if flushErr := storage.FlushStorage(ctx); flushErr != nil {
-			l.ErrorCtx(ctx, "flush storage error", zap.Error(flushErr))
-		}
-		if err := store.CloseStorage(); err != nil {
-			l.PanicCtx(ctx, "failed to close storage", zap.Error(err))
-		}
-	}(store)
+				return closeErr
+			}
 
-	storeInterval := conf.GetStoreIntervalDuration()
+			return srv.Shutdown(ctx)
+		},
+	})
+	return srv
+}
 
-	if storeInterval > 0 {
-		store.InitFlushStorageTicker(ctx, storeInterval)
-	}
+func newLogger(conf *config.ServerConfig) *slog.Logger {
+	return logging.NewLogger(conf.GetLogLevel())
+}
 
-	if conf.Restore {
-		restoreErr := store.RestoreStorage(ctx)
-		if restoreErr != nil {
-			l.ErrorCtx(ctx, "restore storage error", zap.Error(restoreErr))
-		}
-	}
+func getStorage(
+	ctx context.Context,
+	logger *slog.Logger,
+	conf *config.ServerConfig,
+	metrics *domain.Metrics,
+) store.Store {
+	st := store.NewStore(ctx, logger, conf, metrics)
 
-	metricsController := controller.New(l, store, conf)
+	logger.DebugContext(ctx, "Using store algo", slog.String("algo", string(st.GetStoreType())))
 
-	if err := metricsController.Routes().ServeHTTP(conf); err != nil {
-		l.PanicCtx(ctx, "failed to start server", zap.Error(err))
-	}
+	return st
 }
