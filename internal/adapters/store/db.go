@@ -108,11 +108,11 @@ func (d *DBStorage) Restore(ctx context.Context) error {
 	queryG := "SELECT name, value FROM gauges"
 	gauges, gQueryErr := d.poolConn.Query(ctx, queryG)
 
-	defer gauges.Close()
-
 	if gQueryErr != nil {
 		return fmt.Errorf("(db) select gauges error: %w", gQueryErr)
 	}
+
+	defer gauges.Close()
 
 	for gauges.Next() {
 		var gauge domain.Gauge

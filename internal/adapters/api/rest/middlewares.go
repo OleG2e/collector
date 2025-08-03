@@ -28,7 +28,10 @@ type (
 		http.ResponseWriter
 		responseData *responseData
 	}
+	requestIDKey string
 )
+
+const RequestIDKey = requestIDKey("request_id")
 
 func (resp *loggingResponseWriter) Write(b []byte) (int, error) {
 	size, err := resp.ResponseWriter.Write(b)
@@ -239,7 +242,7 @@ func RequestIDMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
-		ctx = context.WithValue(ctx, "request_id", uuid.New().String())
+		ctx = context.WithValue(ctx, RequestIDKey, uuid.New().String())
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

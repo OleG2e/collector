@@ -1,6 +1,7 @@
 package logging
 
 import (
+	"collector/internal/adapters/api/rest"
 	"context"
 	"log/slog"
 	"os"
@@ -25,8 +26,8 @@ func (c *requestIDHandler) Enabled(ctx context.Context, level slog.Level) bool {
 }
 
 func (c *requestIDHandler) Handle(ctx context.Context, r slog.Record) error {
-	if requestID, ok := ctx.Value("request_id").(string); ok {
-		r.AddAttrs(slog.String("request_id", requestID))
+	if requestID, ok := ctx.Value(rest.RequestIDKey).(string); ok {
+		r.AddAttrs(slog.String(string(rest.RequestIDKey), requestID))
 	}
 
 	return c.handler.Handle(ctx, r)
