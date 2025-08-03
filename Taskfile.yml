@@ -60,6 +60,7 @@ tasks:
       - task: test12
       - task: test13
       - task: test14
+      - task: test15
       - echo "Tests are done"
   test1:
     cmds:
@@ -103,3 +104,6 @@ tasks:
   test14:
     cmds:
       - metricstest -test.v -test.run=TestIteration14  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080 -file-storage-path=storage.db -database-dsn='postgres://root:root@localhost:5432/collector?sslmode=disable' -key=test_key
+  test15:
+    cmds:
+      - metricstest -test.v -test.run=TestIteration15  -binary-path=cmd/server/server -source-path=. -agent-binary-path=cmd/agent/agent -server-port=8080 -file-storage-path=storage.db -database-dsn='postgres://root:root@localhost:5432/collector?sslmode=disable' -key=test_key

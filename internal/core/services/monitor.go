@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/mem"
 	"io"
 	"log/slog"
 	"math/rand"
@@ -23,22 +25,20 @@ import (
 )
 
 type Monitor struct {
-	memStats     sync.Map
-	pollCount    atomic.Int64
-	runtimeStats *runtime.MemStats
-	logger       *slog.Logger
-	agentConfig  *config.AgentConfig
-	mx           *sync.RWMutex
-	httpClient   *http.Client
+	memStats    sync.Map
+	pollCount   atomic.Int64
+	logger      *slog.Logger
+	agentConfig *config.AgentConfig
+	mx          *sync.RWMutex
+	httpClient  *http.Client
 }
 
 func NewMonitor(logger *slog.Logger, agentConfig *config.AgentConfig) *Monitor {
 	return &Monitor{
-		mx:           new(sync.RWMutex),
-		runtimeStats: new(runtime.MemStats),
-		logger:       logger,
-		httpClient:   http.DefaultClient,
-		agentConfig:  agentConfig,
+		mx:          new(sync.RWMutex),
+		logger:      logger,
+		httpClient:  http.DefaultClient,
+		agentConfig: agentConfig,
 	}
 }
 
@@ -58,8 +58,17 @@ func (s *Monitor) Run(ctx context.Context) error {
 
 func (s *Monitor) refreshStats() {
 	s.incrementPollCount()
-	runtime.ReadMemStats(s.runtimeStats)
-	s.seedMemStats()
+
+	runtimeStats := new(runtime.MemStats)
+	runtime.ReadMemStats(runtimeStats)
+
+	stats, err := mem.VirtualMemory()
+	if err != nil {
+		s.logger.Error("failed to get memory stats", slog.Any("error", err))
+		stats = new(mem.VirtualMemoryStat)
+	}
+
+	s.seedMemStats(runtimeStats, stats)
 }
 
 func (s *Monitor) resetPollCount() {
@@ -113,35 +122,48 @@ func (s *Monitor) initRefreshStatsTicker(ctx context.Context, g *errgroup.Group)
 	})
 }
 
-func (s *Monitor) seedMemStats() {
-	s.memStats.Store("Alloc", s.runtimeStats.Alloc)
-	s.memStats.Store("BuckHashSys", s.runtimeStats.BuckHashSys)
-	s.memStats.Store("Frees", s.runtimeStats.Frees)
-	s.memStats.Store("GCCPUFraction", s.runtimeStats.GCCPUFraction)
-	s.memStats.Store("GCSys", s.runtimeStats.GCSys)
-	s.memStats.Store("HeapAlloc", s.runtimeStats.HeapAlloc)
-	s.memStats.Store("HeapIdle", s.runtimeStats.HeapIdle)
-	s.memStats.Store("HeapInuse", s.runtimeStats.HeapInuse)
-	s.memStats.Store("HeapObjects", s.runtimeStats.HeapObjects)
-	s.memStats.Store("HeapReleased", s.runtimeStats.HeapReleased)
-	s.memStats.Store("HeapSys", s.runtimeStats.HeapSys)
-	s.memStats.Store("LastGC", s.runtimeStats.LastGC)
-	s.memStats.Store("Lookups", s.runtimeStats.Lookups)
-	s.memStats.Store("MCacheInuse", s.runtimeStats.MCacheInuse)
-	s.memStats.Store("MCacheSys", s.runtimeStats.MCacheSys)
-	s.memStats.Store("MSpanInuse", s.runtimeStats.MSpanInuse)
-	s.memStats.Store("MSpanSys", s.runtimeStats.MSpanSys)
-	s.memStats.Store("Mallocs", s.runtimeStats.Mallocs)
-	s.memStats.Store("NextGC", s.runtimeStats.NextGC)
-	s.memStats.Store("NumForcedGC", s.runtimeStats.NumForcedGC)
-	s.memStats.Store("NumGC", s.runtimeStats.NumGC)
-	s.memStats.Store("OtherSys", s.runtimeStats.OtherSys)
-	s.memStats.Store("PauseTotalNs", s.runtimeStats.PauseTotalNs)
-	s.memStats.Store("StackInuse", s.runtimeStats.StackInuse)
-	s.memStats.Store("StackSys", s.runtimeStats.StackSys)
-	s.memStats.Store("Sys", s.runtimeStats.Sys)
-	s.memStats.Store("TotalAlloc", s.runtimeStats.TotalAlloc)
+func (s *Monitor) seedMemStats(runtimeStats *runtime.MemStats, extraStat *mem.VirtualMemoryStat) {
+	s.memStats.Store("Alloc", runtimeStats.Alloc)
+	s.memStats.Store("BuckHashSys", runtimeStats.BuckHashSys)
+	s.memStats.Store("Frees", runtimeStats.Frees)
+	s.memStats.Store("GCCPUFraction", runtimeStats.GCCPUFraction)
+	s.memStats.Store("GCSys", runtimeStats.GCSys)
+	s.memStats.Store("HeapAlloc", runtimeStats.HeapAlloc)
+	s.memStats.Store("HeapIdle", runtimeStats.HeapIdle)
+	s.memStats.Store("HeapInuse", runtimeStats.HeapInuse)
+	s.memStats.Store("HeapObjects", runtimeStats.HeapObjects)
+	s.memStats.Store("HeapReleased", runtimeStats.HeapReleased)
+	s.memStats.Store("HeapSys", runtimeStats.HeapSys)
+	s.memStats.Store("LastGC", runtimeStats.LastGC)
+	s.memStats.Store("Lookups", runtimeStats.Lookups)
+	s.memStats.Store("MCacheInuse", runtimeStats.MCacheInuse)
+	s.memStats.Store("MCacheSys", runtimeStats.MCacheSys)
+	s.memStats.Store("MSpanInuse", runtimeStats.MSpanInuse)
+	s.memStats.Store("MSpanSys", runtimeStats.MSpanSys)
+	s.memStats.Store("Mallocs", runtimeStats.Mallocs)
+	s.memStats.Store("NextGC", runtimeStats.NextGC)
+	s.memStats.Store("NumForcedGC", runtimeStats.NumForcedGC)
+	s.memStats.Store("NumGC", runtimeStats.NumGC)
+	s.memStats.Store("OtherSys", runtimeStats.OtherSys)
+	s.memStats.Store("PauseTotalNs", runtimeStats.PauseTotalNs)
+	s.memStats.Store("StackInuse", runtimeStats.StackInuse)
+	s.memStats.Store("StackSys", runtimeStats.StackSys)
+	s.memStats.Store("Sys", runtimeStats.Sys)
+	s.memStats.Store("TotalAlloc", runtimeStats.TotalAlloc)
 	s.memStats.Store("RandomValue", rand.Int63())
+	s.memStats.Store("TotalMemory", extraStat.Total)
+	s.memStats.Store("FreeMemory", extraStat.Free)
+
+	var firstCoreUtilization float64
+	percentages, cpuPercentErr := cpu.Percent(0, true)
+	if cpuPercentErr != nil || len(percentages) == 0 {
+		firstCoreUtilization = 0
+	}
+	if len(percentages) > 0 {
+		firstCoreUtilization = percentages[0]
+	}
+
+	s.memStats.Store("CPUutilization1", firstCoreUtilization)
 }
 
 func (s *Monitor) getStatForms() []*domain.MetricForm {
