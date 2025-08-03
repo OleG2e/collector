@@ -1,10 +1,11 @@
 package rest
 
 import (
-	"collector/pkg/network"
 	"log/slog"
 	"net/http"
 	"testing"
+
+	"collector/pkg/network"
 )
 
 func TestAllowedMetricsOnly(t *testing.T) {

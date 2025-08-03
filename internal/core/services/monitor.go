@@ -5,8 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/shirou/gopsutil/cpu"
-	"github.com/shirou/gopsutil/mem"
 	"io"
 	"log/slog"
 	"math/rand"
@@ -21,6 +19,8 @@ import (
 	"collector/internal/core/domain"
 	"collector/pkg/hashing"
 	"collector/pkg/retry"
+	"github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/mem"
 	"golang.org/x/sync/errgroup"
 )
 

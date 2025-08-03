@@ -1,10 +1,11 @@
 package logging
 
 import (
-	"collector/internal/adapters/api/rest"
 	"context"
 	"log/slog"
 	"os"
+
+	"collector/internal/adapters/api/rest"
 )
 
 func NewLogger(lvl slog.Level) *slog.Logger {
