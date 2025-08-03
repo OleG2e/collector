@@ -46,7 +46,7 @@ func newHTTPServer(
 	storeService *services.StoreService,
 ) *http.Server {
 	srv := &http.Server{
-		Addr:    ":8080",
+		Addr:    conf.GetAddress(),
 		Handler: mux,
 	}
 
