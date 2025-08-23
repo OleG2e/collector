@@ -25,25 +25,20 @@ func NewRouter(
 ) *chi.Mux {
 	router := chi.NewRouter()
 
-	buildRoutes(st, router, logger, conf, resp)
+	registerMiddlewares(router, logger, conf)
+	registerMultipleMetricRoutes(st, router, logger, resp)
+	registerSingleMetricRoutes(st, router, logger, resp)
 
 	return router
 }
 
-func buildRoutes(
+func registerMultipleMetricRoutes(
 	st store.Store,
 	router *chi.Mux,
 	logger *slog.Logger,
-	conf *config.ServerConfig,
 	resp *network.Response,
-) {
-	router.Use(RequestIDMiddleware)
-	router.Use(LoggerMiddleware(logger))
-	router.Use(RecoverMiddleware(logger))
-	router.Use(GzipMiddleware(logger))
-	router.Use(CheckSignMiddleware(conf, logger))
-
-	router.Group(func(r chi.Router) {
+) chi.Router {
+	return router.Group(func(r chi.Router) {
 		r.Get("/", func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Add("Content-Type", "text/html")
 			w.WriteHeader(http.StatusOK)
@@ -51,7 +46,22 @@ func buildRoutes(
 		r.Get("/ping", pingDB(st, resp))
 		r.Post("/updates/", updateMetrics(st, logger, resp))
 	})
+}
 
+func registerMiddlewares(router *chi.Mux, logger *slog.Logger, conf *config.ServerConfig) {
+	router.Use(RequestIDMiddleware)
+	router.Use(LoggerMiddleware(logger))
+	router.Use(RecoverMiddleware(logger))
+	router.Use(GzipMiddleware(logger))
+	router.Use(CheckSignMiddleware(conf, logger))
+}
+
+func registerSingleMetricRoutes(
+	st store.Store,
+	router *chi.Mux,
+	logger *slog.Logger,
+	resp *network.Response,
+) {
 	router.Route("/", func(r chi.Router) {
 		r.Use(AllowedMetricsOnly(resp, logger))
 		r.Post("/update/", updateMetric(st, logger, resp))

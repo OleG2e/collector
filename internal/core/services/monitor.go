@@ -1,11 +1,8 @@
 package services
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"math/rand"
 	"net/http"
@@ -17,8 +14,6 @@ import (
 
 	"collector/internal/config"
 	"collector/internal/core/domain"
-	"collector/pkg/hashing"
-	"collector/pkg/retry"
 	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/mem"
 	"golang.org/x/sync/errgroup"
@@ -61,14 +56,14 @@ func (s *Monitor) refreshStats() {
 
 	runtimeStats := new(runtime.MemStats)
 	runtime.ReadMemStats(runtimeStats)
+	s.seedMemStats(runtimeStats)
 
-	stats, err := mem.VirtualMemory()
+	extraStats, err := mem.VirtualMemory()
 	if err != nil {
-		s.logger.Error("failed to get memory stats", slog.Any("error", err))
-		stats = new(mem.VirtualMemoryStat)
+		s.logger.Error("failed to get memory extraStats", slog.Any("error", err))
+		extraStats = new(mem.VirtualMemoryStat)
 	}
-
-	s.seedMemStats(runtimeStats, stats)
+	s.seedExtraStats(extraStats)
 }
 
 func (s *Monitor) resetPollCount() {
@@ -86,7 +81,8 @@ func (s *Monitor) initSendTicker(ctx context.Context, g *errgroup.Group) {
 		for {
 			select {
 			case <-ticker.C:
-				sendDataErr := s.sendData(ctx)
+				stats := append(s.getStatForms(), s.getPollCountForm())
+				sendDataErr := sendData(ctx, s.httpClient, s.agentConfig, stats)
 				if sendDataErr != nil {
 					return fmt.Errorf("send stats ticker data error: %w", sendDataErr)
 				}
@@ -122,7 +118,7 @@ func (s *Monitor) initRefreshStatsTicker(ctx context.Context, g *errgroup.Group)
 	})
 }
 
-func (s *Monitor) seedMemStats(runtimeStats *runtime.MemStats, extraStat *mem.VirtualMemoryStat) {
+func (s *Monitor) seedMemStats(runtimeStats *runtime.MemStats) {
 	s.memStats.Store("Alloc", runtimeStats.Alloc)
 	s.memStats.Store("BuckHashSys", runtimeStats.BuckHashSys)
 	s.memStats.Store("Frees", runtimeStats.Frees)
@@ -151,6 +147,9 @@ func (s *Monitor) seedMemStats(runtimeStats *runtime.MemStats, extraStat *mem.Vi
 	s.memStats.Store("Sys", runtimeStats.Sys)
 	s.memStats.Store("TotalAlloc", runtimeStats.TotalAlloc)
 	s.memStats.Store("RandomValue", rand.Int63())
+}
+
+func (s *Monitor) seedExtraStats(extraStat *mem.VirtualMemoryStat) {
 	s.memStats.Store("TotalMemory", extraStat.Total)
 	s.memStats.Store("FreeMemory", extraStat.Free)
 
@@ -192,70 +191,4 @@ func (s *Monitor) getPollCountForm() *domain.MetricForm {
 
 func (s *Monitor) getPollCount() int64 {
 	return s.pollCount.Load()
-}
-
-func (s *Monitor) sendData(ctx context.Context) error {
-	address := s.agentConfig.GetAddress()
-	url := "http://" + address + "/updates/"
-
-	stats := s.getStatForms()
-
-	data := make([]*domain.MetricForm, len(stats)+1)
-	data = append(data, stats...)
-	data = append(data, s.getPollCountForm())
-
-	dataMarshalled, marshErr := json.Marshal(data)
-	if marshErr != nil {
-		return fmt.Errorf("marshall data error: %w", marshErr)
-	}
-
-	hash := ""
-	if s.agentConfig.HasHashKey() {
-		hash = hashing.HashByKey(string(dataMarshalled), s.agentConfig.GetHashKey())
-	}
-
-	tryErr := retry.Try(func() error {
-		req, reqErr := http.NewRequestWithContext(
-			ctx,
-			http.MethodPost,
-			url,
-			bytes.NewReader(dataMarshalled),
-		)
-
-		if reqErr != nil {
-			return fmt.Errorf("request error: %w", reqErr)
-		}
-
-		req.Header.Add("Content-Type", "application/json")
-
-		if s.agentConfig.HasHashKey() {
-			req.Header.Add(domain.HashHeader, hash)
-		}
-
-		reqCloseErr := req.Body.Close()
-		if reqCloseErr != nil {
-			return fmt.Errorf("request close error: %w", reqCloseErr)
-		}
-
-		resp, respErr := s.httpClient.Do(req)
-
-		if respErr != nil {
-			return fmt.Errorf("response error: %w", respErr)
-		}
-
-		_, bodyErr := io.ReadAll(resp.Body)
-
-		if bodyErr != nil {
-			return fmt.Errorf("read body error: %w", bodyErr)
-		}
-
-		respCloseErr := resp.Body.Close()
-		if respCloseErr != nil {
-			return fmt.Errorf("response close body error: %w", respCloseErr)
-		}
-
-		return nil
-	})
-
-	return tryErr
 }
