@@ -198,7 +198,8 @@ func CheckSignMiddleware(
 ) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		fn := func(writer http.ResponseWriter, req *http.Request) {
-			if config.HasHashKey() {
+			hashKey := config.GetHashKey()
+			if hashKey != "" {
 				headerHash := req.Header.Get(domain.HashHeader)
 				logger.InfoContext(
 					req.Context(),
@@ -219,7 +220,7 @@ func CheckSignMiddleware(
 
 					req.Body = io.NopCloser(&bodyBuffer)
 
-					hashBody := hashing.HashByKey(bodyData.String(), config.GetHashKey())
+					hashBody := hashing.HashByKey(bodyData.String(), hashKey)
 					if headerHash != hashBody {
 						network.NewResponse(
 							logger,

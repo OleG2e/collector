@@ -55,7 +55,7 @@ func sendData(
 	jobs := make(chan *http.Request, poolSize)
 	results := make(chan *SendMetricResult, poolSize)
 
-	workers := 5
+	workers := conf.RateLimit
 	for w := 1; w <= workers; w++ {
 		go worker(client, jobs, results)
 	}
@@ -75,8 +75,8 @@ func sendData(
 			return fmt.Errorf("marshall data error: %w", marshErr)
 		}
 
-		hash := ""
-		if conf.HasHashKey() {
+		hash := conf.GetHashKey()
+		if hash != "" {
 			hash = hashing.HashByKey(string(data), conf.GetHashKey())
 		}
 

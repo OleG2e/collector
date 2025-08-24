@@ -51,8 +51,9 @@ func (resp *Response) Send(
 		return
 	}
 
-	if resp.conf.HasHashKey() {
-		hashBody := hashing.HashByKey(string(marshData), resp.conf.GetHashKey())
+	hashKey := resp.conf.GetHashKey()
+	if hashKey != "" {
+		hashBody := hashing.HashByKey(string(marshData), hashKey)
 		writer.Header().Add(domain.HashHeader, hashBody)
 	}
 

@@ -13,6 +13,7 @@ import (
 	"collector/internal/core/services"
 	"collector/pkg/logging"
 	"collector/pkg/network"
+
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
@@ -25,6 +26,8 @@ func main() {
 		}),
 		fx.Supply(domain.NewMetrics()),
 		fx.Provide(context.Background),
+		fx.Provide(parseEnvs),
+		fx.Provide(parseFlags),
 		fx.Provide(config.NewServerConfig),
 		fx.Provide(services.NewStoreService),
 		fx.Provide(getStorage),
@@ -115,4 +118,19 @@ func getStorage(
 	logger.DebugContext(ctx, "Using store algo", slog.String("algo", string(st.GetStoreType())))
 
 	return st
+}
+
+func parseEnvs() *config.EnvContainer {
+	conf := new(config.EnvContainer)
+	conf.Parse()
+
+	return conf
+}
+
+func parseFlags() *config.FlagContainer {
+	conf := new(config.FlagContainer)
+	conf.AppType = config.AppTypeServer
+	conf.Parse()
+
+	return conf
 }
