@@ -1,223 +1,247 @@
 package config
 
 import (
-	"context"
 	"flag"
-	"log"
+	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"time"
 
-	"go.uber.org/zap/zapcore"
-
-	"github.com/OleG2e/collector/pkg/logging"
-
 	"github.com/caarlos0/env/v11"
-	"go.uber.org/zap"
 )
 
 const (
 	defaultReportIntervalSeconds = 10
 	defaultPollIntervalSeconds   = 2
 	defaultStoreIntervalSeconds  = 300
+	defaultRateLimit             = 5
+
+	AppTypeServer = AppType("server")
+	AppTypeAgent  = AppType("agent")
 )
 
 type (
+	AppType    string
+	BaseConfig struct {
+		AppType  AppType
+		LogLevel string `env:"LOG_LEVEL"`
+		Address  string `env:"ADDRESS"`
+		HashKey  string `env:"KEY"`
+	}
 	AgentConfig struct {
-		LogLevel       string `env:"LOG_LEVEL"`
-		Address        string `env:"ADDRESS"`
-		ReportInterval int    `env:"REPORT_INTERVAL"`
-		PollInterval   int    `env:"POLL_INTERVAL"`
-		HashKey        string `env:"KEY"`
+		BaseConfig
+		ReportInterval int `env:"REPORT_INTERVAL"`
+		PollInterval   int `env:"POLL_INTERVAL"`
+		RateLimit      int `env:"RATE_LIMIT"`
 	}
 	ServerConfig struct {
-		LogLevel        string `env:"LOG_LEVEL"`
-		Address         string `env:"ADDRESS"`
+		BaseConfig
 		FileStoragePath string `env:"FILE_STORAGE_PATH"`
 		DSN             string `env:"DATABASE_DSN"`
 		StoreInterval   int    `env:"STORE_INTERVAL"`
 		Restore         bool   `env:"RESTORE"`
+	}
+	EnvContainer struct {
+		AppType         AppType
+		LogLevel        string `env:"LOG_LEVEL"`
+		Address         string `env:"ADDRESS"`
 		HashKey         string `env:"KEY"`
+		ReportInterval  int    `env:"REPORT_INTERVAL"`
+		PollInterval    int    `env:"POLL_INTERVAL"`
+		RateLimit       int    `env:"RATE_LIMIT"`
+		FileStoragePath string `env:"FILE_STORAGE_PATH"`
+		DSN             string `env:"DATABASE_DSN"`
+		StoreInterval   int    `env:"STORE_INTERVAL"`
+		Restore         bool   `env:"RESTORE"`
+	}
+	FlagContainer struct {
+		AppType         AppType
+		LogLevel        string
+		Address         string
+		HashKey         string
+		ReportInterval  int
+		PollInterval    int
+		RateLimit       int
+		FileStoragePath string
+		DSN             string
+		StoreInterval   int
+		Restore         bool
 	}
 )
 
-func NewAgentConfig(ctx context.Context, l *logging.ZapLogger) (*AgentConfig, error) {
-	c := AgentConfig{}
-
-	err := env.Parse(&c)
-
-	l.DebugCtx(ctx, "init agent env config",
-		zap.String("LOG_LEVEL", os.Getenv("LOG_LEVEL")),
-		zap.String("ADDRESS", os.Getenv("ADDRESS")),
-		zap.String("REPORT_INTERVAL", os.Getenv("REPORT_INTERVAL")),
-		zap.String("POLL_INTERVAL", os.Getenv("POLL_INTERVAL")),
-		zap.String("KEY", os.Getenv("KEY")),
-	)
-
-	if err != nil {
-		return nil, err
+func (fc *FlagContainer) Parse() {
+	if fc.AppType == AppTypeServer {
+		flag.StringVar(&fc.FileStoragePath, "f", "storage.db", "file storage path")
+		flag.BoolVar(&fc.Restore, "r", true, "restore previous data")
+		flag.StringVar(&fc.DSN, "d", "", "postgres DSN")
+		flag.IntVar(&fc.StoreInterval, "i", defaultStoreIntervalSeconds, "store interval")
+	}
+	if fc.AppType == AppTypeAgent {
+		flag.IntVar(&fc.PollInterval, "p", defaultPollIntervalSeconds, "poll interval")
+		flag.IntVar(&fc.ReportInterval, "r", defaultReportIntervalSeconds, "report interval")
+		flag.IntVar(&fc.RateLimit, "l", defaultRateLimit, "rate limit")
 	}
 
-	var (
-		addr, logLevel, hashKey string
-		ri, pi                  int
-	)
-
-	flag.StringVar(&logLevel, "log_level", "info", "log level")
-	flag.StringVar(&addr, "a", "localhost:8080", "server address")
-	flag.StringVar(&hashKey, "k", "", "hash key")
-	flag.IntVar(&ri, "r", defaultReportIntervalSeconds, "report interval")
-	flag.IntVar(&pi, "p", defaultPollIntervalSeconds, "poll interval")
+	flag.StringVar(&fc.LogLevel, "log_level", "debug", "log level")
+	flag.StringVar(&fc.Address, "a", "localhost:8080", "server address")
+	flag.StringVar(&fc.HashKey, "k", "", "hash key")
 
 	flag.Parse()
 
-	l.DebugCtx(ctx, "init agent flags config",
-		zap.String("LOG_LEVEL", logLevel),
-		zap.String("ADDRESS", addr),
-		zap.String("KEY", hashKey),
-		zap.Int("REPORT_INTERVAL", ri),
-		zap.Int("POLL_INTERVAL", pi),
+	logger := slog.Default()
+	logger.Info("init flags",
+		slog.String("LOG_LEVEL", fc.LogLevel),
+		slog.String("ADDRESS", fc.Address),
+		slog.String("KEY", fc.HashKey),
+		slog.Int("REPORT_INTERVAL", fc.ReportInterval),
+		slog.Int("POLL_INTERVAL", fc.PollInterval),
+		slog.Int("RATE_LIMIT", fc.RateLimit),
+		slog.Int("STORE_INTERVAL", fc.StoreInterval),
+		slog.String("FILE_STORAGE_PATH", fc.FileStoragePath),
+		slog.Bool("RESTORE", fc.Restore),
+		slog.String("DATABASE_DSN", fc.DSN),
 	)
-
-	if c.LogLevel == "" {
-		c.LogLevel = logLevel
-	}
-	if c.Address == "" {
-		c.Address = addr
-	}
-	if c.HashKey == "" {
-		c.HashKey = hashKey
-	}
-	if c.ReportInterval == 0 {
-		c.ReportInterval = ri
-	}
-	if c.PollInterval == 0 {
-		c.PollInterval = pi
-	}
-
-	l.DebugCtx(ctx, "final agent params",
-		zap.String("ADDRESS", c.Address),
-		zap.Int("REPORT_INTERVAL", c.ReportInterval),
-		zap.Int("POLL_INTERVAL", c.PollInterval),
-		zap.String("LOG_LEVEL", c.LogLevel),
-		zap.String("KEY", c.HashKey),
-	)
-
-	return &c, nil
 }
 
-func NewServerConfig(ctx context.Context, l *logging.ZapLogger) (*ServerConfig, error) {
-	c := ServerConfig{}
-
-	err := env.Parse(&c)
-
-	l.DebugCtx(ctx, "init server env config",
-		zap.String("ADDRESS", os.Getenv("ADDRESS")),
-		zap.String("LOG_LEVEL", os.Getenv("LOG_LEVEL")),
-		zap.String("STORE_INTERVAL", os.Getenv("STORE_INTERVAL")),
-		zap.String("FILE_STORAGE_PATH", os.Getenv("FILE_STORAGE_PATH")),
-		zap.String("RESTORE", os.Getenv("RESTORE")),
-		zap.String("DATABASE_DSN", os.Getenv("DATABASE_DSN")),
-		zap.String("KEY", os.Getenv("KEY")),
+func (ec *EnvContainer) Parse() {
+	logger := slog.Default()
+	logger.Info("init envs",
+		slog.String("LOG_LEVEL", os.Getenv("LOG_LEVEL")),
+		slog.String("ADDRESS", os.Getenv("ADDRESS")),
+		slog.String("KEY", os.Getenv("KEY")),
+		slog.String("REPORT_INTERVAL", os.Getenv("REPORT_INTERVAL")),
+		slog.String("POLL_INTERVAL", os.Getenv("POLL_INTERVAL")),
+		slog.String("RATE_LIMIT", os.Getenv("RATE_LIMIT")),
+		slog.String("STORE_INTERVAL", os.Getenv("STORE_INTERVAL")),
+		slog.String("FILE_STORAGE_PATH", os.Getenv("FILE_STORAGE_PATH")),
+		slog.String("RESTORE", os.Getenv("RESTORE")),
+		slog.String("DATABASE_DSN", os.Getenv("DATABASE_DSN")),
 	)
 
+	err := env.Parse(ec)
 	if err != nil {
-		return nil, err
+		logger.Error("fail to Parse env", slog.Any("error", err))
+		panic(err)
+	}
+}
+
+func buildBaseConfig(appType AppType, fc *FlagContainer, ec *EnvContainer) BaseConfig {
+	conf := BaseConfig{
+		AppType: appType,
 	}
 
-	var (
-		addr, logLevel, fs, dsn, hashKey string
-		si                               int
-		r                                bool
+	if ec.Address != "" {
+		conf.Address = ec.Address
+	} else {
+		conf.Address = fc.Address
+	}
+
+	if ec.LogLevel != "" {
+		conf.LogLevel = ec.LogLevel
+	} else {
+		conf.LogLevel = fc.LogLevel
+	}
+
+	if ec.HashKey != "" {
+		conf.HashKey = ec.HashKey
+	} else {
+		conf.HashKey = fc.HashKey
+	}
+
+	return conf
+}
+
+func NewAgentConfig(fc *FlagContainer, ec *EnvContainer) (*AgentConfig, error) {
+	conf := &AgentConfig{BaseConfig: buildBaseConfig(AppTypeAgent, fc, ec)}
+
+	if ec.ReportInterval != 0 {
+		conf.ReportInterval = ec.ReportInterval
+	} else {
+		conf.ReportInterval = fc.ReportInterval
+	}
+	if ec.PollInterval != 0 {
+		conf.PollInterval = ec.PollInterval
+	} else {
+		conf.PollInterval = fc.PollInterval
+	}
+	if ec.RateLimit != 0 {
+		conf.RateLimit = ec.RateLimit
+	} else {
+		conf.RateLimit = fc.RateLimit
+	}
+
+	logger := slog.Default()
+	logger.Info("final agent params",
+		slog.String("ADDRESS", conf.Address),
+		slog.Int("REPORT_INTERVAL", conf.ReportInterval),
+		slog.Int("POLL_INTERVAL", conf.PollInterval),
+		slog.Int("RATE_LIMIT", conf.RateLimit),
+		slog.String("LOG_LEVEL", conf.LogLevel),
+		slog.String("KEY", conf.HashKey),
 	)
 
-	flag.StringVar(&addr, "a", "localhost:8080", "server host:port")
-	flag.StringVar(&logLevel, "log_level", "debug", "log level")
-	flag.StringVar(&hashKey, "k", "", "hash key")
-	flag.IntVar(&si, "i", defaultStoreIntervalSeconds, "store interval")
-	flag.StringVar(&fs, "f", "storage.db", "file storage path")
-	flag.BoolVar(&r, "r", true, "restore previous data")
-	flag.StringVar(&dsn, "d", "", "postgres DSN")
+	return conf, nil
+}
 
-	flag.Parse()
+func NewServerConfig(fc *FlagContainer, ec *EnvContainer) (*ServerConfig, error) {
+	conf := &ServerConfig{BaseConfig: buildBaseConfig(AppTypeServer, fc, ec)}
 
-	l.DebugCtx(ctx, "init server flags config",
-		zap.String("ADDRESS", addr),
-		zap.String("FILE_STORAGE_PATH", fs),
-		zap.String("LOG_LEVEL", logLevel),
-		zap.String("DATABASE_DSN", dsn),
-		zap.Int("STORE_INTERVAL", si),
-		zap.Bool("RESTORE", r),
-		zap.String("KEY", hashKey),
-	)
-
-	if c.LogLevel == "" {
-		c.LogLevel = logLevel
+	if ec.FileStoragePath != "" {
+		conf.FileStoragePath = ec.FileStoragePath
+	} else {
+		conf.FileStoragePath = fc.FileStoragePath
 	}
-	if c.Address == "" {
-		c.Address = addr
-	}
-	if c.HashKey == "" {
-		c.HashKey = hashKey
-	}
-	if c.FileStoragePath == "" {
-		c.FileStoragePath = fs
-	}
-	if c.DSN == "" {
-		c.DSN = dsn
+	if ec.DSN != "" {
+		conf.DSN = ec.DSN
+	} else {
+		conf.DSN = fc.DSN
 	}
 
 	v, ok := os.LookupEnv("STORE_INTERVAL")
 	if ok {
 		vInt, vErr := strconv.Atoi(v)
 		if vErr != nil {
-			return nil, vErr
+			return nil, fmt.Errorf("convert STORE_INTERVAL env to int error: %w", vErr)
 		}
-		c.StoreInterval = vInt
+
+		conf.StoreInterval = vInt
 	} else {
-		c.StoreInterval = si
+		conf.StoreInterval = fc.StoreInterval
 	}
 
 	v, ok = os.LookupEnv("RESTORE")
 	if ok {
 		vBool, vBoolErr := strconv.ParseBool(v)
 		if vBoolErr != nil {
-			return nil, vBoolErr
+			return nil, fmt.Errorf("convert RESTORE env to bool error: %w", vBoolErr)
 		}
-		c.Restore = vBool
+
+		conf.Restore = vBool
 	} else {
-		c.Restore = r
+		conf.Restore = fc.Restore
 	}
 
-	l.DebugCtx(ctx, "final server params",
-		zap.String("ADDRESS", c.Address),
-		zap.String("FILE_STORAGE_PATH", c.FileStoragePath),
-		zap.Int("STORE_INTERVAL", c.StoreInterval),
-		zap.Bool("RESTORE", c.Restore),
-		zap.String("LOG_LEVEL", c.LogLevel),
-		zap.String("DATABASE_DSN", c.DSN),
-		zap.String("KEY", c.HashKey),
+	logger := slog.Default()
+	logger.Info("final server params",
+		slog.String("ADDRESS", conf.Address),
+		slog.Bool("RESTORE", conf.Restore),
+		slog.Int("STORE_INTERVAL", conf.StoreInterval),
+		slog.String("FILE_STORAGE_PATH", conf.FileStoragePath),
+		slog.String("LOG_LEVEL", conf.LogLevel),
+		slog.String("KEY", conf.HashKey),
+		slog.String("DATABASE_DSN", conf.DSN),
 	)
 
-	return &c, nil
+	return conf, nil
 }
 
-func (c *AgentConfig) GetLogLevel() zapcore.Level {
-	level, levelErr := zap.ParseAtomicLevel(c.LogLevel)
-	if levelErr != nil {
-		log.Panic(levelErr)
-	}
-
-	return level.Level()
+func (c *AgentConfig) GetLogLevel() slog.Level {
+	return parseLogLevel(c.LogLevel)
 }
 
-func (c *ServerConfig) GetLogLevel() zapcore.Level {
-	level, levelErr := zap.ParseAtomicLevel(c.LogLevel)
-	if levelErr != nil {
-		log.Panic(levelErr)
-	}
-
-	return level.Level()
+func (c *ServerConfig) GetLogLevel() slog.Level {
+	return parseLogLevel(c.LogLevel)
 }
 
 func (c *AgentConfig) GetAddress() string {
@@ -226,10 +250,6 @@ func (c *AgentConfig) GetAddress() string {
 
 func (c *AgentConfig) GetHashKey() string {
 	return c.HashKey
-}
-
-func (c *AgentConfig) HasHashKey() bool {
-	return c.HashKey != ""
 }
 
 func (c *ServerConfig) GetAddress() string {
@@ -260,6 +280,17 @@ func (c *ServerConfig) GetHashKey() string {
 	return c.HashKey
 }
 
-func (c *ServerConfig) HasHashKey() bool {
-	return c.HashKey != ""
+func parseLogLevel(lvl string) slog.Level {
+	switch lvl {
+	case "debug":
+		return slog.LevelDebug
+	case "info":
+		return slog.LevelInfo
+	case "warn":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
 }

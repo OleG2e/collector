@@ -1,4 +1,4 @@
-package network
+package domain
 
 import (
 	"bytes"
@@ -15,21 +15,11 @@ const (
 	MetricTypeCounter = MetricType("counter")
 )
 
-const HashHeader = "HashSHA256"
-
 type MetricForm struct {
 	ID    string     `json:"id"`              // имя метрики
 	MType MetricType `json:"type"`            // параметр, принимающий значение gauge или counter
 	Delta *int64     `json:"delta,omitempty"` // значение метрики в случае передачи counter
 	Value *float64   `json:"value,omitempty"` // значение метрики в случае передачи gauge
-}
-
-func (f *MetricForm) IsGaugeType() bool {
-	return f.MType == MetricTypeGauge
-}
-
-func (f *MetricForm) IsCounterType() bool {
-	return f.MType == MetricTypeCounter
 }
 
 func NewFormByRequest(r *http.Request) (*MetricForm, error) {
@@ -49,15 +39,25 @@ func NewFormByRequest(r *http.Request) (*MetricForm, error) {
 	return &form, decodeErr
 }
 
-func NewFormArrayByRequest(r *http.Request) ([]MetricForm, error) {
+func (f *MetricForm) IsGaugeType() bool {
+	return f.MType == MetricTypeGauge
+}
+
+func (f *MetricForm) IsCounterType() bool {
+	return f.MType == MetricTypeCounter
+}
+
+const HashHeader = "HashSHA256"
+
+func NewFormArrayByRequest(req *http.Request) ([]MetricForm, error) {
 	var bodyBuffer bytes.Buffer
-	r.Body = io.NopCloser(io.TeeReader(r.Body, &bodyBuffer))
+	req.Body = io.NopCloser(io.TeeReader(req.Body, &bodyBuffer))
 
 	var forms []MetricForm
 
-	decodeErr := json.NewDecoder(r.Body).Decode(&forms)
+	decodeErr := json.NewDecoder(req.Body).Decode(&forms)
 
-	r.Body = io.NopCloser(&bodyBuffer)
+	req.Body = io.NopCloser(&bodyBuffer)
 
 	if errors.Is(decodeErr, io.EOF) {
 		decodeErr = nil

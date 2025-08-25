@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS counters
 (
     name       VARCHAR(255) PRIMARY KEY,
-    value      INT       NOT NULL,
+    value      BIGINT    NOT NULL,
     created_at TIMESTAMP NOT NULL
 );
 
