@@ -7,7 +7,6 @@ import (
 	"collector/internal/config"
 	"collector/internal/core/services"
 	"collector/pkg/logging"
-
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
 )

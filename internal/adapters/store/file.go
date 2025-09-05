@@ -133,8 +133,8 @@ func (f *FileStorage) Restore(ctx context.Context) error {
 }
 
 func (f *FileStorage) GetMetrics() *domain.Metrics {
-	f.mx.RLock()
-	defer f.mx.RUnlock()
+	f.mx.Lock()
+	defer f.mx.Unlock()
 
 	return f.metrics
 }

@@ -13,7 +13,6 @@ import (
 	"collector/internal/core/services"
 	"collector/pkg/logging"
 	"collector/pkg/network"
-
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"

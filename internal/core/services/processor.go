@@ -94,7 +94,9 @@ func sendData(
 }
 
 func sendRequest(client *http.Client, req *http.Request) (*SendMetricResult, error) {
-	defer req.Body.Close()
+	if req.Body != nil {
+		defer req.Body.Close()
+	}
 
 	resp, respErr := client.Do(req)
 
