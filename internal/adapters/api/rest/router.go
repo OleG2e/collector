@@ -3,12 +3,14 @@ package rest
 import (
 	"log/slog"
 	"net/http"
+	"net/http/pprof"
 	"strconv"
 
 	"collector/internal/adapters/store"
 	"collector/internal/config"
 	"collector/internal/core/domain"
 	"collector/pkg/network"
+
 	"github.com/go-chi/chi/v5"
 )
 
@@ -28,6 +30,7 @@ func NewRouter(
 	registerMiddlewares(router, logger, conf)
 	registerMultipleMetricRoutes(st, router, logger, resp)
 	registerSingleMetricRoutes(st, router, logger, resp)
+	registerProfilerRoutes(router)
 
 	return router
 }
@@ -79,6 +82,17 @@ func registerSingleMetricRoutes(
 			resp.Success(w)
 		})
 	})
+}
+
+func registerProfilerRoutes(
+	router *chi.Mux,
+) {
+	router.Get("/debug/pprof/", pprof.Index)
+	router.Get("/debug/pprof/heap", pprof.Index)
+	router.Get("/debug/pprof/symbol", pprof.Symbol)
+	router.Get("/debug/pprof/trace", pprof.Trace)
+	router.Get("/debug/pprof/profile", pprof.Profile)
+	router.Get("/debug/pprof/cmdline", pprof.Cmdline)
 }
 
 func updateMetric(st store.Store, logger *slog.Logger, resp *network.Response) http.HandlerFunc {
